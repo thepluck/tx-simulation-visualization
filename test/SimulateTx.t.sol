@@ -1,0 +1,145 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.0;
+
+import "forge-std/Test.sol";
+
+import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import "openzeppelin-contracts/contracts/token/ERC721/IERC721.sol";
+
+import "../contracts/SimulateTx.s.sol";
+
+contract SimulateTxTest is Test {
+  address internal constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+  address internal constant BAYC = 0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D;
+  uint256 internal constant BAYC_TOKEN_ID = 1;
+  uint256 internal constant WETH_AMOUNT = 1 ether;
+  address internal constant STATE_OVERRIDE_WETH_OWNER = 0x0000000000000000000000000000000000000011;
+  address internal constant STATE_OVERRIDE_WETH_SPENDER = 0x0000000000000000000000000000000000000012;
+
+  SimulateTxScript internal script;
+
+  function setUp() public {
+    string memory rpcUrl = vm.envOr("MAINNET_RPC_URL", string(""));
+    if (bytes(rpcUrl).length == 0) {
+      rpcUrl = vm.envOr("ETH_RPC_URL", string(""));
+    }
+    vm.skip(bytes(rpcUrl).length == 0, "MAINNET_RPC_URL or ETH_RPC_URL is required");
+
+    vm.createSelectFork(rpcUrl);
+    script = new SimulateTxScript();
+  }
+
+  function testOverrideWETHBalanceAndApprovalThenTransferFrom() public {
+    address owner = makeAddr("weth owner");
+    address spender = makeAddr("weth spender");
+    address recipient = makeAddr("weth recipient");
+
+    SimulateTxScript.LabelOverride[] memory labelOverrides = new SimulateTxScript.LabelOverride[](3);
+    labelOverrides[0] = SimulateTxScript.LabelOverride({account: owner, label: "WETHOwner"});
+    labelOverrides[1] = SimulateTxScript.LabelOverride({account: spender, label: "WETHSpender"});
+    labelOverrides[2] = SimulateTxScript.LabelOverride({account: recipient, label: "WETHRecipient"});
+
+    SimulateTxScript.ERC20BalanceOverride[] memory erc20BalanceOverrides =
+      new SimulateTxScript.ERC20BalanceOverride[](1);
+    erc20BalanceOverrides[0] =
+      SimulateTxScript.ERC20BalanceOverride({token: WETH, account: owner, balance: WETH_AMOUNT});
+
+    SimulateTxScript.ERC20ApprovalOverride[] memory erc20ApprovalOverrides =
+      new SimulateTxScript.ERC20ApprovalOverride[](1);
+    erc20ApprovalOverrides[0] =
+      SimulateTxScript.ERC20ApprovalOverride({token: WETH, owner: owner, spender: spender, amount: WETH_AMOUNT});
+
+    SimulateTxScript.ERC721ApprovalOverride[] memory erc721ApprovalOverrides =
+      new SimulateTxScript.ERC721ApprovalOverride[](0);
+
+    uint256 recipientBalanceBefore = IERC20(WETH).balanceOf(recipient);
+
+    script.run(
+      labelOverrides,
+      erc20BalanceOverrides,
+      erc20ApprovalOverrides,
+      erc721ApprovalOverrides,
+      "",
+      spender,
+      WETH,
+      abi.encodeCall(IERC20.transferFrom, (owner, recipient, WETH_AMOUNT))
+    );
+
+    assertEq(IERC20(WETH).balanceOf(owner), 0);
+    assertEq(IERC20(WETH).balanceOf(recipient), recipientBalanceBefore + WETH_AMOUNT);
+    assertEq(IERC20(WETH).allowance(owner, spender), 0);
+  }
+
+  function testStateOverrideContractDealsWETHBalanceAndApprovalThenTransferFrom() public {
+    address owner = STATE_OVERRIDE_WETH_OWNER;
+    address spender = STATE_OVERRIDE_WETH_SPENDER;
+    address recipient = makeAddr("state override weth recipient");
+
+    SimulateTxScript.LabelOverride[] memory labelOverrides = new SimulateTxScript.LabelOverride[](0);
+    SimulateTxScript.ERC20BalanceOverride[] memory erc20BalanceOverrides =
+      new SimulateTxScript.ERC20BalanceOverride[](0);
+    SimulateTxScript.ERC20ApprovalOverride[] memory erc20ApprovalOverrides =
+      new SimulateTxScript.ERC20ApprovalOverride[](0);
+    SimulateTxScript.ERC721ApprovalOverride[] memory erc721ApprovalOverrides =
+      new SimulateTxScript.ERC721ApprovalOverride[](0);
+
+    uint256 recipientBalanceBefore = IERC20(WETH).balanceOf(recipient);
+
+    script.run(
+      labelOverrides,
+      erc20BalanceOverrides,
+      erc20ApprovalOverrides,
+      erc721ApprovalOverrides,
+      type(WETHStateOverride).creationCode,
+      spender,
+      WETH,
+      abi.encodeCall(IERC20.transferFrom, (owner, recipient, WETH_AMOUNT))
+    );
+
+    assertEq(IERC20(WETH).balanceOf(owner), 0);
+    assertEq(IERC20(WETH).balanceOf(recipient), recipientBalanceBefore + WETH_AMOUNT);
+    assertEq(IERC20(WETH).allowance(owner, spender), 0);
+  }
+
+  function testOverrideNFTApprovalThenTransferFrom() public {
+    address owner = IERC721(BAYC).ownerOf(BAYC_TOKEN_ID);
+    address spender = makeAddr("nft spender");
+    address recipient = makeAddr("nft recipient");
+
+    SimulateTxScript.LabelOverride[] memory labelOverrides = new SimulateTxScript.LabelOverride[](0);
+    SimulateTxScript.ERC20BalanceOverride[] memory erc20BalanceOverrides =
+      new SimulateTxScript.ERC20BalanceOverride[](0);
+    SimulateTxScript.ERC20ApprovalOverride[] memory erc20ApprovalOverrides =
+      new SimulateTxScript.ERC20ApprovalOverride[](0);
+    SimulateTxScript.ERC721ApprovalOverride[] memory erc721ApprovalOverrides =
+      new SimulateTxScript.ERC721ApprovalOverride[](1);
+    erc721ApprovalOverrides[0] =
+      SimulateTxScript.ERC721ApprovalOverride({token: BAYC, owner: owner, spender: spender, tokenId: BAYC_TOKEN_ID});
+
+    script.run(
+      labelOverrides,
+      erc20BalanceOverrides,
+      erc20ApprovalOverrides,
+      erc721ApprovalOverrides,
+      "",
+      spender,
+      BAYC,
+      abi.encodeCall(IERC721.transferFrom, (owner, recipient, BAYC_TOKEN_ID))
+    );
+
+    assertEq(IERC721(BAYC).ownerOf(BAYC_TOKEN_ID), recipient);
+  }
+}
+
+contract WETHStateOverride is Test {
+  address internal constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+  address internal constant OWNER = 0x0000000000000000000000000000000000000011;
+  address internal constant SPENDER = 0x0000000000000000000000000000000000000012;
+  uint256 internal constant AMOUNT = 1 ether;
+
+  fallback() external {
+    deal(WETH, OWNER, AMOUNT);
+    vm.prank(OWNER);
+    IERC20(WETH).approve(SPENDER, AMOUNT);
+  }
+}
