@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchChainConfig, fetchHealth, fetchProjects, simulate } from "./api";
 import OutputPanel from "./components/OutputPanel";
@@ -10,7 +10,8 @@ import {
   type FormState,
   type HealthStatus,
   type OutputView,
-  type RequestTab
+  type RequestTab,
+  type ThemeMode
 } from "./form";
 import { buildAddressLabels } from "./labels";
 import { loadPersistedUIState, savePersistedUIState } from "./persistence";
@@ -24,14 +25,19 @@ export default function App() {
   const [requestTab, setRequestTab] = useState<RequestTab>(initialUIState.requestTab);
   const [outputView, setOutputView] = useState<OutputView>(initialUIState.outputView);
   const [response, setResponse] = useState<SimulateResponse | null>(initialUIState.response);
+  const [theme, setTheme] = useState<ThemeMode>(initialUIState.theme);
   const [error, setError] = useState("");
   const [expandMode, setExpandMode] = useState<ExpandMode>("depth");
   const [traceExpandDepth, setTraceExpandDepth] = useState(initialUIState.traceExpandDepth);
   const simulationAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    savePersistedUIState({ form, outputView, requestTab, response, traceExpandDepth });
-  }, [form, outputView, requestTab, response, traceExpandDepth]);
+    savePersistedUIState({ form, outputView, requestTab, response, theme, traceExpandDepth });
+  }, [form, outputView, requestTab, response, theme, traceExpandDepth]);
+
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
 
   const healthQuery = useQuery({
     queryKey: ["health", form.apiUrl],
@@ -124,6 +130,7 @@ export default function App() {
         projectSuggestions={projectSuggestions}
         requestTab={requestTab}
         status={status}
+        theme={theme}
         onAbort={abortSimulation}
         onProjectBrowsed={(path) => {
           setOptimisticProjects((current) => mergeProjects([path], current).slice(0, 20));
@@ -131,6 +138,7 @@ export default function App() {
         }}
         onRequestTabChange={setRequestTab}
         onSubmit={submit}
+        onThemeChange={setTheme}
         onUpdate={update}
       />
       <OutputPanel

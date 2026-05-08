@@ -3,17 +3,61 @@
   --bg: #f4f6f8;
   --surface: #ffffff;
   --surface-alt: #eef2f5;
+  --surface-low: #fbfcfd;
   --text: #172026;
   --muted: #66737f;
   --border: #d7dee5;
   --accent: #0f766e;
   --accent-strong: #0b5f58;
+  --on-accent: #ffffff;
   --danger: #b42318;
+  --danger-strong: #8f1d14;
+  --danger-border: rgba(180, 35, 24, 0.28);
+  --danger-bg: rgba(180, 35, 24, 0.08);
   --ok: #087443;
+  --ok-border: rgba(8, 116, 67, 0.28);
+  --ok-bg: rgba(8, 116, 67, 0.08);
   --blue: #2563eb;
+  --blue-bg: rgba(38, 87, 194, 0.08);
+  --blue-bg-strong: rgba(38, 87, 194, 0.14);
   --line: #7b8794;
+  --floating-bg: rgba(255, 255, 255, 0.94);
+  --floating-border: rgba(224, 229, 236, 0.9);
+  --focus-ring: rgba(15, 118, 110, 0.28);
+  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --shadow-pop: 0 10px 24px rgba(15, 23, 42, 0.14);
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #101419;
+  --surface: #171d24;
+  --surface-alt: #222a34;
+  --surface-low: #131920;
+  --text: #e6edf3;
+  --muted: #9aa8b7;
+  --border: #34404d;
+  --accent: #2dd4bf;
+  --accent-strong: #14b8a6;
+  --on-accent: #061311;
+  --danger: #fb7185;
+  --danger-strong: #f43f5e;
+  --danger-border: rgba(251, 113, 133, 0.32);
+  --danger-bg: rgba(251, 113, 133, 0.12);
+  --ok: #34d399;
+  --ok-border: rgba(52, 211, 153, 0.28);
+  --ok-bg: rgba(52, 211, 153, 0.1);
+  --blue: #93c5fd;
+  --blue-bg: rgba(147, 197, 253, 0.12);
+  --blue-bg-strong: rgba(147, 197, 253, 0.2);
+  --line: #93a4b8;
+  --floating-bg: rgba(23, 29, 36, 0.96);
+  --floating-border: rgba(71, 85, 105, 0.86);
+  --focus-ring: rgba(45, 212, 191, 0.32);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-pop: 0 12px 28px rgba(0, 0, 0, 0.38);
 }
 
 * {
@@ -60,6 +104,29 @@ button {
   gap: 12px;
 }
 
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.theme-toggle {
+  min-height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-alt);
+  color: var(--text);
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.theme-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 h1,
 h2,
 h3,
@@ -68,16 +135,16 @@ p {
 }
 
 h1 {
-  font-size: 22px;
+  font-size: 24px;
   line-height: 1.2;
 }
 
 h2 {
-  font-size: 20px;
+  font-size: 22px;
 }
 
 h3 {
-  font-size: 15px;
+  font-size: 17px;
 }
 
 .status-pill {
@@ -85,19 +152,19 @@ h3 {
   border-radius: 999px;
   padding: 4px 10px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1;
 }
 
 .status-pill.online {
-  border-color: rgba(8, 116, 67, 0.28);
-  background: rgba(8, 116, 67, 0.08);
+  border-color: var(--ok-border);
+  background: var(--ok-bg);
   color: var(--ok);
 }
 
 .status-pill.error {
-  border-color: rgba(180, 35, 24, 0.28);
-  background: rgba(180, 35, 24, 0.08);
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
   color: var(--danger);
 }
 
@@ -111,7 +178,7 @@ label {
   display: grid;
   gap: 6px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 650;
 }
 
@@ -131,14 +198,14 @@ textarea {
 textarea {
   resize: vertical;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 input:focus,
 select:focus,
 textarea:focus,
 button:focus-visible {
-  outline: 2px solid rgba(15, 118, 110, 0.28);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -149,19 +216,24 @@ button:focus-visible {
 
 .browse-field {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
 }
 
-.browse-button {
+.browse-button,
+.history-button {
   min-width: 82px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface-alt);
   color: var(--text);
   padding: 0 12px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
+}
+
+.history-button {
+  min-width: 58px;
 }
 
 .browse-button:disabled {
@@ -169,14 +241,61 @@ button:focus-visible {
   opacity: 0.7;
 }
 
-.project-path-input {
+.history-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.project-history-dropdown {
+  position: relative;
+  display: inline-flex;
+}
+
+.project-history-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  width: min(420px, calc(100vw - 40px));
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  padding: 4px;
+}
+
+.project-history-item {
+  min-width: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  padding: 8px;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 12px;
+  font-weight: 650;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-history-item:hover,
+.project-history-item:focus-visible {
+  background: var(--surface-alt);
+}
+
+.project-path-input {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
 }
 
 .field-error {
   color: var(--danger);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 650;
 }
 
@@ -224,7 +343,7 @@ button:focus-visible {
   color: var(--muted);
   min-height: 30px;
   padding: 7px 10px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1;
   text-align: center;
@@ -243,7 +362,7 @@ button:focus-visible {
 .view-button.active {
   background: var(--surface);
   color: var(--text);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--shadow-soft);
 }
 
 .tab-panel {
@@ -255,7 +374,7 @@ button:focus-visible {
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: #fbfcfd;
+  background: var(--surface-low);
 }
 
 .override-group-header {
@@ -269,7 +388,7 @@ button:focus-visible {
 
 .override-group-header h3 {
   color: var(--text);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   line-height: 1.1;
 }
@@ -285,9 +404,11 @@ button:focus-visible {
   border-radius: 5px;
   background: var(--surface);
   color: var(--text);
-  font-size: 13px;
+  padding: 0;
+  font-size: 15px;
   font-weight: 800;
   line-height: 1;
+  text-align: center;
 }
 
 .add-row-button {
@@ -302,7 +423,7 @@ button:focus-visible {
 .override-empty {
   padding: 6px 8px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .override-list {
@@ -330,7 +451,7 @@ button:focus-visible {
   border: 0;
   border-radius: 6px;
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   font-weight: 750;
 }
 
@@ -343,7 +464,7 @@ button:focus-visible {
 }
 
 .primary-action.abort-action:hover {
-  background: #8f1d14;
+  background: var(--danger-strong);
 }
 
 .primary-action:disabled {
@@ -352,12 +473,12 @@ button:focus-visible {
 }
 
 .error-box {
-  border: 1px solid rgba(180, 35, 24, 0.28);
+  border: 1px solid var(--danger-border);
   border-radius: 7px;
-  background: rgba(180, 35, 24, 0.08);
+  background: var(--danger-bg);
   color: var(--danger);
   padding: 10px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .workspace {
@@ -373,7 +494,7 @@ button:focus-visible {
 .workspace-toolbar p,
 .muted {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .output-view {
@@ -404,7 +525,7 @@ button:focus-visible {
   align-items: center;
   gap: 6px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
 }
 
@@ -416,18 +537,24 @@ button:focus-visible {
   background: var(--surface);
   color: var(--text);
   padding: 0 8px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
 }
 
 .icon-actions button {
+  display: inline-grid;
+  place-items: center;
   width: 30px;
   height: 30px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface);
   color: var(--text);
+  padding: 0;
+  font-size: 16px;
   font-weight: 800;
+  line-height: 1;
+  text-align: center;
 }
 
 .trace-tree {
@@ -436,7 +563,7 @@ button:focus-visible {
 
 .empty-state {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .trace-node {
@@ -480,8 +607,10 @@ button:focus-visible {
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
+  line-height: 1;
+  text-align: center;
 }
 
 .trace-node[open] > summary::before {
@@ -498,7 +627,7 @@ button:focus-visible {
   background: var(--surface-alt);
   color: var(--muted);
   padding: 3px 6px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -512,7 +641,7 @@ button:focus-visible {
   word-break: break-word;
   text-align: left;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.45;
 }
 
@@ -520,7 +649,7 @@ button:focus-visible {
   max-width: 100%;
   border: 0;
   border-radius: 4px;
-  background: rgba(38, 87, 194, 0.08);
+  background: var(--blue-bg);
   color: var(--blue);
   cursor: pointer;
   font: inherit;
@@ -532,7 +661,7 @@ button:focus-visible {
 }
 
 .trace-bytes-toggle:hover {
-  background: rgba(38, 87, 194, 0.14);
+  background: var(--blue-bg-strong);
 }
 
 .trace-bytes-toggle.expanded {
@@ -542,7 +671,7 @@ button:focus-visible {
 
 .trace-meta {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.45;
   white-space: nowrap;
 }
@@ -560,7 +689,7 @@ button:focus-visible {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fbfcfd;
+  background: var(--surface-low);
   overflow: hidden;
 }
 
@@ -583,9 +712,9 @@ button:focus-visible {
   justify-content: center;
   border: 1.2px solid var(--border);
   border-radius: 7px;
-  background: #ffffff;
+  background: var(--surface);
   color: var(--text);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   text-align: center;
 }
@@ -606,6 +735,11 @@ button:focus-visible {
   border-color: var(--blue);
 }
 
+.flow-node-handle {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .flow-node-label {
   display: block;
   max-width: calc(100% - 16px);
@@ -618,7 +752,7 @@ button:focus-visible {
   display: block;
   margin-top: 4px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
 }
 
@@ -632,11 +766,11 @@ button:focus-visible {
   display: flex;
   align-items: center;
   gap: 5px;
-  border: 1px solid rgba(224, 229, 236, 0.9);
+  border: 1px solid var(--floating-border);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--floating-bg);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   padding: 3px 7px 3px 5px;
   pointer-events: all;
@@ -690,7 +824,7 @@ button:focus-visible {
 
 .address-reference:focus-visible {
   border-radius: 4px;
-  outline: 2px solid rgba(15, 118, 110, 0.28);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -703,7 +837,7 @@ button:focus-visible {
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--surface);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+  box-shadow: var(--shadow-pop);
   padding: 6px;
   overflow: hidden;
 }
@@ -730,7 +864,7 @@ button:focus-visible {
   max-width: min(344px, calc(100vw - 92px));
   color: var(--blue);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -748,7 +882,7 @@ button:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .address-copy-button {
@@ -790,14 +924,14 @@ button:focus-visible {
 }
 
 .address-copy-button.copied {
-  border-color: rgba(8, 116, 67, 0.36);
+  border-color: var(--ok-border);
   color: var(--ok);
 }
 
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .data-table th,
@@ -810,7 +944,7 @@ button:focus-visible {
 
 .data-table th {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -861,7 +995,7 @@ button:focus-visible {
   place-items: center;
   background: var(--surface-alt);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -889,7 +1023,7 @@ button:focus-visible {
 
 .token-change-usd {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .total-usd-cell {
@@ -910,9 +1044,9 @@ button:focus-visible {
   min-height: calc(100vh - 140px);
   overflow: auto;
   padding: 14px;
-  color: #101828;
+  color: var(--text);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
   white-space: pre-wrap;
 }
@@ -948,6 +1082,14 @@ button:focus-visible {
   .two-col,
   .toggle-grid {
     grid-template-columns: 1fr;
+  }
+
+  .browse-field {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .project-path-input {
+    grid-column: 1 / -1;
   }
 
   .workspace-toolbar {

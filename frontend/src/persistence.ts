@@ -1,4 +1,4 @@
-import { defaults, type FormState, type OutputView, type RequestTab } from "./form";
+import { defaults, type FormState, type OutputView, type RequestTab, type ThemeMode } from "./form";
 import { simulateResponseSchema } from "./schemas";
 import type { SimulateResponse } from "./types";
 
@@ -9,6 +9,7 @@ export type PersistedUIState = {
   outputView: OutputView;
   requestTab: RequestTab;
   response: SimulateResponse | null;
+  theme: ThemeMode;
   traceExpandDepth: number;
 };
 
@@ -31,6 +32,7 @@ export function loadPersistedUIState(): PersistedUIState {
       outputView,
       requestTab: validRequestTab(parsed.requestTab) ? parsed.requestTab : "overrides",
       response,
+      theme: validThemeMode(parsed.theme) ? parsed.theme : "light",
       traceExpandDepth: clampDepth(parsed.traceExpandDepth)
     };
   } catch {
@@ -75,6 +77,7 @@ function defaultUIState(): PersistedUIState {
     outputView: "trace",
     requestTab: "overrides",
     response: null,
+    theme: "light",
     traceExpandDepth: 3
   };
 }
@@ -85,6 +88,10 @@ function validRequestTab(value: unknown): value is RequestTab {
 
 function validOutputView(value: unknown): value is OutputView {
   return value === "trace" || value === "flow" || value === "balances" || value === "json";
+}
+
+function validThemeMode(value: unknown): value is ThemeMode {
+  return value === "light" || value === "dark";
 }
 
 function sanitizeResponse(value: unknown): SimulateResponse | null {

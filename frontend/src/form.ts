@@ -13,6 +13,7 @@ export type RequestTab = "overrides" | "state" | "compiler";
 export type OutputView = "trace" | "flow" | "balances" | "json";
 export type ExpandMode = "depth" | "expand" | "collapse";
 export type HealthStatus = "offline" | "online" | "error";
+export type ThemeMode = "light" | "dark";
 
 export type FormState = {
   apiUrl: string;

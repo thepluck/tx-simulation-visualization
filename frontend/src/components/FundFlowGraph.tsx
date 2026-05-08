@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { Graph, layout as dagreLayout, type EdgeLabel, type Point } from "@dagrejs/dagre";
 import {
   Background,
   BaseEdge,
   Controls,
   EdgeLabelRenderer,
+  Handle,
   MarkerType,
   Position,
   ReactFlow,
@@ -34,13 +36,28 @@ type FlowNodeData = {
 };
 
 type FlowEdgeData = {
-  index: number;
+  amount: string;
+  indices: number[];
+  labelX?: number;
+  labelY?: number;
   metadata: Map<string, TokenMetadata>;
-  transfer: ERC20Transfer;
+  points: Point[];
+  token: string;
 };
 
 type FlowNode = Node<FlowNodeData, "address">;
 type FlowEdge = Edge<FlowEdgeData, "transfer">;
+type GraphTransfer = {
+  amount: string;
+  from: string;
+  id: string;
+  indices: number[];
+  to: string;
+  token: string;
+  transfers: ERC20Transfer[];
+};
+
+const nodeHeight = 48;
 
 const nodeTypes = {
   address: AddressNode
@@ -112,6 +129,7 @@ function AddressNode(props: NodeProps<FlowNode>) {
   );
   return (
     <div className="flow-node" style={{ width }} title={label ? `${label}\n${address}` : address}>
+      <Handle className="flow-node-handle" type="target" position={Position.Left} />
       {href ? (
         <a className="flow-node-link" href={href} rel="noreferrer" target="_blank">
           {content}
@@ -119,18 +137,24 @@ function AddressNode(props: NodeProps<FlowNode>) {
       ) : (
         content
       )}
+      <Handle className="flow-node-handle" type="source" position={Position.Right} />
     </div>
   );
 }
 
 function TransferEdge(props: EdgeProps<FlowEdge>) {
-  const [path, labelX, labelY] = getBezierPath(props);
+  const [fallbackPath, fallbackLabelX, fallbackLabelY] = getBezierPath(props);
   if (!props.data) {
-    return <BaseEdge id={props.id} markerEnd={props.markerEnd} path={path} />;
+    return <BaseEdge id={props.id} markerEnd={props.markerEnd} path={fallbackPath} />;
   }
 
-  const token = tokenInfo(props.data.transfer.token, props.data.metadata);
-  const amount = formatFlowAmount(props.data.transfer.normalizedAmount || props.data.transfer.amount);
+  const path = props.data.points.length >= 2 ? pathFromPoints(props.data.points) : fallbackPath;
+  const labelPoint = edgeLabelPoint(props.data.points);
+  const labelX = props.data.labelX ?? labelPoint.x ?? fallbackLabelX;
+  const labelY = props.data.labelY ?? labelPoint.y ?? fallbackLabelY;
+  const token = tokenInfo(props.data.token, props.data.metadata);
+  const amount = formatFlowAmount(props.data.amount);
+  const indexLabel = formatIndexLabel(props.data.indices);
   return (
     <>
       <BaseEdge id={props.id} markerEnd={props.markerEnd} path={path} />
@@ -140,17 +164,28 @@ function TransferEdge(props: EdgeProps<FlowEdge>) {
           style={{
             transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`
           }}
-          title={`${amount} ${token.symbol} [${props.data.index + 1}]`}
+          title={`${amount} ${token.symbol} ${indexLabel}`}
         >
           <TokenLogo logoUrl={token.logoUrl} symbol={token.symbol} />
           <span>
             {amount} {token.symbol}
           </span>
-          <span className="edge-index-label">[{props.data.index + 1}]</span>
+          <span className="edge-index-label">{indexLabel}</span>
         </div>
       </EdgeLabelRenderer>
     </>
   );
+}
+
+function pathFromPoints(points: Point[]): string {
+  return points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+}
+
+function edgeLabelPoint(points: Point[]): { x?: number; y?: number } {
+  if (points.length === 0) {
+    return {};
+  }
+  return points[Math.floor(points.length / 2)];
 }
 
 function buildGraph(
@@ -161,73 +196,184 @@ function buildGraph(
   containerWidth: number
 ): { edges: FlowEdge[]; height: number; nodes: FlowNode[] } {
   const userIds = Array.from(new Set(transfers.flatMap((transfer) => [transfer.from, transfer.to])));
-  const outgoing = new Set(transfers.map((transfer) => transfer.from));
-  const incoming = new Set(transfers.map((transfer) => transfer.to));
-  const width = Math.max(560, Math.round(containerWidth || 1100));
-  const height = Math.max(460, userIds.length * 92 + 120);
-  const left = userIds.filter((id) => outgoing.has(id));
-  const right = userIds.filter((id) => !outgoing.has(id) || incoming.has(id));
-  const center = userIds.filter((id) => !left.includes(id) && !right.includes(id));
-  const nodeWidth = graphNodeWidth(Math.max(left.length, right.length, center.length), userIds.length, width);
-  const horizontalPadding = width < 720 ? 28 : 64;
-  const leftX = horizontalPadding;
-  const rightX = width - horizontalPadding - nodeWidth;
-  const centerX = width / 2 - nodeWidth / 2;
-  const placed = new Map<string, FlowNode>();
+  const graphTransfers = groupGraphTransfers(transfers);
+  const nodeWidth = graphNodeWidth(userIds.length, containerWidth);
+  const dagreGraph = new Graph({ directed: true, multigraph: true });
+  dagreGraph.setGraph({
+    acyclicer: "greedy",
+    edgesep: 18,
+    marginx: 48,
+    marginy: 48,
+    nodesep: 58,
+    rankdir: "LR",
+    ranker: "network-simplex",
+    ranksep: 150
+  });
+  dagreGraph.setDefaultEdgeLabel(() => ({}));
 
-  placeColumn(left, leftX, nodeWidth, addressLabels, explorerBaseUrl, placed);
-  placeColumn(right, rightX, nodeWidth, addressLabels, explorerBaseUrl, placed);
-  placeColumn(center, centerX, nodeWidth, addressLabels, explorerBaseUrl, placed);
+  for (const id of userIds) {
+    dagreGraph.setNode(id, { width: nodeWidth, height: nodeHeight });
+  }
+  for (const transfer of graphTransfers) {
+    dagreGraph.setEdge(
+      transfer.from,
+      transfer.to,
+      {
+        height: 30,
+        labelpos: "c",
+        weight: 1,
+        width: estimateEdgeLabelWidth(transfer, metadata)
+      },
+      transfer.id
+    );
+  }
+  dagreLayout(dagreGraph);
 
-  const edges: FlowEdge[] = transfers.map((transfer, index) => ({
-    id: `${transfer.from}-${transfer.to}-${transfer.token}-${index}`,
-    source: transfer.from,
-    target: transfer.to,
-    type: "transfer",
-    data: { index, metadata, transfer },
-    markerEnd: {
-      type: MarkerType.ArrowClosed,
-      color: "#8992a1"
-    }
-  }));
+  const nodes: FlowNode[] = userIds.map((id) => {
+    const point = dagreGraph.node(id) as { x?: number; y?: number } | undefined;
+    return {
+      id,
+      type: "address",
+      data: { address: id, addressLabels, explorerBaseUrl, width: nodeWidth },
+      position: {
+        x: Math.max(0, (point?.x ?? 0) - nodeWidth / 2),
+        y: Math.max(0, (point?.y ?? 0) - nodeHeight / 2)
+      },
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left
+    };
+  });
 
-  return { height, nodes: Array.from(placed.values()), edges };
+  const edges: FlowEdge[] = graphTransfers.map((transfer) => {
+    const route = dagreGraph.edge(transfer.from, transfer.to, transfer.id) as EdgeLabel | undefined;
+    return {
+      id: transfer.id,
+      source: transfer.from,
+      target: transfer.to,
+      type: "transfer",
+      data: {
+        amount: transfer.amount,
+        indices: transfer.indices,
+        labelX: route?.x,
+        labelY: route?.y,
+        metadata,
+        points: route?.points ?? [],
+        token: transfer.token
+      },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        color: "#8992a1"
+      }
+    };
+  });
+  const graphLabel = dagreGraph.graph() as { height?: number; width?: number } | undefined;
+  const height = Math.max(460, Math.ceil((graphLabel?.height ?? 0) + 40));
+
+  return { height, nodes, edges };
 }
 
-function graphNodeWidth(maxColumnSize: number, totalNodes: number, graphWidth: number): number {
-  const density = Math.max(maxColumnSize, Math.ceil(totalNodes / 2));
-  const maxForViewport = Math.max(120, Math.min(300, (graphWidth - 180) / 2));
-  let width = 180;
-  if (density <= 2) {
+function groupGraphTransfers(transfers: ERC20Transfer[]): GraphTransfer[] {
+  const groups = new Map<string, GraphTransfer>();
+  for (const [index, transfer] of transfers.entries()) {
+    const token = transfer.token.toLowerCase();
+    const id = `${transfer.from}-${transfer.to}-${token}`;
+    const current =
+      groups.get(id) ??
+      ({
+        amount: "0",
+        from: transfer.from,
+        id,
+        indices: [],
+        to: transfer.to,
+        token,
+        transfers: []
+      } satisfies GraphTransfer);
+    current.indices.push(index + 1);
+    current.transfers.push(transfer);
+    groups.set(id, current);
+  }
+
+  for (const group of groups.values()) {
+    group.amount = summedTransferAmount(group.transfers);
+  }
+  return Array.from(groups.values());
+}
+
+function estimateEdgeLabelWidth(transfer: GraphTransfer, metadata: Map<string, TokenMetadata>): number {
+  const token = tokenInfo(transfer.token, metadata);
+  const text = `${formatFlowAmount(transfer.amount)} ${token.symbol} ${formatIndexLabel(transfer.indices)}`;
+  return Math.min(260, Math.max(82, text.length * 8 + 34));
+}
+
+function summedTransferAmount(transfers: ERC20Transfer[]): string {
+  if (transfers.length === 1) {
+    return transfers[0].normalizedAmount || transfers[0].amount;
+  }
+  const values = transfers.map((transfer) => transfer.normalizedAmount || transfer.amount);
+  const decimalTotal = sumDecimalValues(values);
+  if (decimalTotal !== undefined) {
+    return decimalTotal;
+  }
+  try {
+    return transfers.reduce((sum, transfer) => sum + BigInt(transfer.amount), 0n).toString();
+  } catch {
+    return values[0] ?? "0";
+  }
+}
+
+function sumDecimalValues(values: string[]): string | undefined {
+  const parts = values.map((value) => value.trim().match(/^([0-9]+)(?:\.([0-9]+))?$/));
+  if (parts.some((part) => !part)) {
+    return undefined;
+  }
+  const fractionLength = Math.max(...parts.map((part) => part?.[2]?.length ?? 0));
+  const scale = 10n ** BigInt(fractionLength);
+  const total = parts.reduce((sum, part) => {
+    const integer = BigInt(part?.[1] ?? "0") * scale;
+    const fraction = (part?.[2] ?? "").padEnd(fractionLength, "0");
+    return sum + integer + BigInt(fraction || "0");
+  }, 0n);
+  const integer = total / scale;
+  const fraction = (total % scale).toString().padStart(fractionLength, "0").replace(/0+$/, "");
+  return fraction ? `${integer}.${fraction}` : integer.toString();
+}
+
+function formatIndexLabel(indices: number[]): string {
+  if (indices.length === 0) {
+    return "[]";
+  }
+  const ranges: string[] = [];
+  let start = indices[0];
+  let previous = indices[0];
+  for (const index of indices.slice(1)) {
+    if (index === previous + 1) {
+      previous = index;
+      continue;
+    }
+    ranges.push(formatIndexRange(start, previous));
+    start = index;
+    previous = index;
+  }
+  ranges.push(formatIndexRange(start, previous));
+  return `[${ranges.join(", ")}]`;
+}
+
+function formatIndexRange(start: number, end: number): string {
+  return start === end ? String(start) : `${start}-${end}`;
+}
+
+function graphNodeWidth(totalNodes: number, containerWidth: number): number {
+  const graphWidth = Math.max(560, Math.round(containerWidth || 1100));
+  const maxForViewport = Math.max(150, Math.min(280, graphWidth / 3.4));
+  let width = 210;
+  if (totalNodes <= 4) {
     width = 300;
-  } else if (density <= 4) {
+  } else if (totalNodes <= 8) {
     width = 260;
-  } else if (density <= 7) {
+  } else if (totalNodes <= 14) {
     width = 220;
   }
   return Math.round(Math.min(width, maxForViewport));
-}
-
-function placeColumn(
-  ids: string[],
-  x: number,
-  width: number,
-  addressLabels: AddressLabels,
-  explorerBaseUrl: string,
-  placed: Map<string, FlowNode>
-) {
-  ids.forEach((id, index) => {
-    if (!placed.has(id)) {
-      placed.set(id, {
-        id,
-        type: "address",
-        data: { address: id, addressLabels, explorerBaseUrl, width },
-        position: { x, y: 70 + index * 92 },
-        sourcePosition: Position.Right,
-        targetPosition: Position.Left
-      });
-    }
-  });
 }
 
 function truncateMiddle(value: string, maxLength: number): string {

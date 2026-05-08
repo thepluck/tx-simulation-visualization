@@ -1,6 +1,7 @@
 import { useState, type FormEventHandler } from "react";
 import { browseProject } from "../api";
-import type { FormState, HealthStatus, RequestTab, UpdateForm } from "../form";
+import type { FormState, HealthStatus, RequestTab, ThemeMode, UpdateForm } from "../form";
+import ProjectHistoryDropdown from "./ProjectHistoryDropdown";
 import ScriptOverridesTab from "./ScriptOverridesTab";
 
 type RequestFormProps = {
@@ -11,10 +12,12 @@ type RequestFormProps = {
   projectSuggestions: string[];
   requestTab: RequestTab;
   status: HealthStatus;
+  theme: ThemeMode;
   onAbort: () => void;
   onProjectBrowsed: (path: string) => void;
   onRequestTabChange: (value: RequestTab) => void;
   onSubmit: FormEventHandler<HTMLFormElement>;
+  onThemeChange: (value: ThemeMode) => void;
   onUpdate: UpdateForm;
 };
 
@@ -27,10 +30,12 @@ export default function RequestForm(props: RequestFormProps) {
     projectSuggestions,
     requestTab,
     status,
+    theme,
     onAbort,
     onProjectBrowsed,
     onRequestTabChange,
     onSubmit,
+    onThemeChange,
     onUpdate
   } = props;
   const [browseError, setBrowseError] = useState("");
@@ -54,7 +59,17 @@ export default function RequestForm(props: RequestFormProps) {
     <section className="control-panel" aria-label="Simulation request">
       <div className="panel-header">
         <h1>Tx Simulation</h1>
-        <span className={`status-pill ${status}`}>{status}</span>
+        <div className="panel-header-actions">
+          <button
+            aria-label={theme === "dark" ? "Use light theme" : "Use dark theme"}
+            className="theme-toggle"
+            type="button"
+            onClick={() => onThemeChange(theme === "dark" ? "light" : "dark")}
+          >
+            {theme === "dark" ? "Light" : "Dark"}
+          </button>
+          <span className={`status-pill ${status}`}>{status}</span>
+        </div>
       </div>
 
       <form className="request-form" onSubmit={onSubmit}>
@@ -90,16 +105,11 @@ export default function RequestForm(props: RequestFormProps) {
             <input
               className="project-path-input"
               id="foundry-project"
-              list="project-history"
               value={form.projectPath}
               placeholder="~/foundry-project"
               onChange={(event) => onUpdate("projectPath", event.target.value)}
             />
-            <datalist id="project-history">
-              {projectSuggestions.map((path) => (
-                <option key={path} value={path} />
-              ))}
-            </datalist>
+            <ProjectHistoryDropdown projects={projectSuggestions} onSelect={(path) => onUpdate("projectPath", path)} />
             <button className="browse-button" type="button" disabled={isBrowsingProject} onClick={handleBrowseProject}>
               {isBrowsingProject ? "Choosing..." : "Browse"}
             </button>

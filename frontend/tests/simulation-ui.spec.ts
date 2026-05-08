@@ -67,7 +67,16 @@ test("uses configured explorer links and renders only the last main call subtree
 
   await page.goto("/");
   await expect(page.getByText("online")).toBeVisible();
-  await expect(page.locator("datalist#project-history option[value='~/Kyber/ks-dex-aggregator-sc']")).toHaveCount(1);
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await page.getByRole("button", { name: "Use dark theme" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.getByRole("button", { name: "Use light theme" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Past projects" })).toBeEnabled();
+  await page.getByRole("button", { name: "Past projects" }).click();
+  const projectHistoryMenu = page.getByRole("menu");
+  await expect(projectHistoryMenu.getByRole("menuitem", { name: "~/Kyber/ks-dex-aggregator-sc" })).toBeVisible();
+  await projectHistoryMenu.getByRole("menuitem", { name: "~/Kyber/ks-dex-aggregator-sc" }).click();
+  await expect(page.getByLabel("Foundry Project")).toHaveValue("~/Kyber/ks-dex-aggregator-sc");
   await page.getByLabel("Trace expand depth").fill("1");
 
   await page.getByRole("button", { name: "Browse" }).click();
@@ -84,6 +93,8 @@ test("uses configured explorer links and renders only the last main call subtree
 
   await page.reload();
   await expect(page.getByText("online")).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.getByRole("button", { name: "Use light theme" })).toBeVisible();
   await expect(page.getByLabel("Trace expand depth")).toHaveValue("1");
   await expect(page.getByLabel("Foundry Project")).toHaveValue("/Users/test/foundry-project");
   await expect(page.getByLabel("Block")).toHaveValue("23000000");
@@ -101,9 +112,13 @@ test("uses configured explorer links and renders only the last main call subtree
   await expect(page.getByText("success | 12ms | exit 0 | browser-test")).toBeVisible();
   await expect(page.getByRole("img", { name: "Fund flow graph" })).toBeVisible();
 
+  await expect(page.locator(".flow-svg .react-flow__edge-path")).toHaveCount(4);
+  await expect(page.locator(".edge-label")).toHaveCount(4);
+  await expect(page.locator(".edge-label").filter({ hasText: "[1-50]" })).toBeVisible();
+  await expect.poll(() => flowColumnCount(page)).toBeGreaterThanOrEqual(3);
   await expect(page.locator(`.flow-svg a[href="${explorerURL}/address/${owner}"]`)).toHaveCount(1);
   await expect(page.locator(`.flow-svg a[href="${explorerURL}/address/${recipient}"]`)).toHaveCount(1);
-  await expect(page.locator(`.edge-table .address-reference-card-link[href="${explorerURL}/address/${owner}"]`)).toHaveCount(50);
+  await expect(page.locator(`.edge-table .address-reference-card-link[href="${explorerURL}/address/${owner}"]`)).toHaveCount(51);
   await expect(page.locator(".edge-table tbody tr").nth(0).locator(".address-reference-text").first()).toHaveText("WETHOwner");
 
   await page.evaluate(() => {
@@ -269,6 +284,13 @@ async function expectLocatorInsideViewport(page: Page, locator: Locator) {
   expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.height + 1);
 }
 
+async function flowColumnCount(page: Page): Promise<number> {
+  return page.locator(".flow-svg .react-flow__node").evaluateAll((nodes) => {
+    const lefts = nodes.map((node) => Math.round(node.getBoundingClientRect().left / 8) * 8);
+    return new Set(lefts).size;
+  });
+}
+
 async function expectTraceDepth(page: Page, depth: number, expectedOpenStates: boolean[]) {
   await expect(page.getByLabel("Trace expand depth")).toHaveValue(String(depth));
   const nodes = page.locator(".trace-node");
@@ -284,15 +306,44 @@ function simulateResponse() {
     kind: "event",
     value: `Transfer(from: WETHOwner: [${owner}], to: TraceRecipient: [${recipient}], value: ${index + 1})`
   }));
-  const transfers = Array.from({ length: 50 }, () => ({
-    token,
-    from: owner,
-    to: recipient,
-    amount: "1000000000000000000",
-    normalizedAmount: "1",
-    symbol: "WETH",
-    logoUrl: ""
-  }));
+  const transfers = [
+    ...Array.from({ length: 50 }, () => ({
+      token,
+      from: owner,
+      to: recipient,
+      amount: "1000000000000000000",
+      normalizedAmount: "1",
+      symbol: "WETH",
+      logoUrl: ""
+    })),
+    {
+      token,
+      from: owner,
+      to: helper,
+      amount: "1000000000000000000",
+      normalizedAmount: "1",
+      symbol: "WETH",
+      logoUrl: ""
+    },
+    {
+      token,
+      from: helper,
+      to: spender,
+      amount: "1000000000000000000",
+      normalizedAmount: "1",
+      symbol: "WETH",
+      logoUrl: ""
+    },
+    {
+      token,
+      from: spender,
+      to: recipient,
+      amount: "1000000000000000000",
+      normalizedAmount: "1",
+      symbol: "WETH",
+      logoUrl: ""
+    }
+  ];
 
   return {
     id: "browser-test",
