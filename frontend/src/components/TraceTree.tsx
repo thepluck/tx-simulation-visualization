@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ExpandMode } from "../form";
-import { resolveAddressReference, type AddressLabels } from "../labels";
+import { looksLikeTraceLabel, resolveAddressReference, resolveLabelAlias, type AddressLabels } from "../labels";
 import type { TraceNode } from "../types";
 import AddressReference from "./AddressReference";
 import TraceArguments from "./TraceArguments";
@@ -11,11 +11,10 @@ type TraceTreeProps = {
   expandDepth: number;
   explorerBaseUrl: string;
   nodes: TraceNode[];
-  target: string;
 };
 
 export default function TraceTree(props: TraceTreeProps) {
-  const visibleNodes = useMemo(() => mainCallTrace(props.nodes, props.target, props.addressLabels), [props.addressLabels, props.nodes, props.target]);
+  const visibleNodes = useMemo(() => mainCallTrace(props.nodes), [props.nodes]);
 
   if (visibleNodes.length === 0) {
     return <div className="trace-tree empty-state">No trace</div>;
@@ -61,29 +60,23 @@ function TraceNodeView(props: {
   }, [props.depth, props.expandDepth, props.expandMode]);
 
   const main = traceLabel(props.node, props.addressLabels, props.explorerBaseUrl);
-  const meta = [props.node.callType, props.node.gas ? `${props.node.gas} gas` : ""].filter(Boolean).join(" | ");
+  const kind = traceKindLabel(props.node);
+  const meta = props.node.gas ? `${props.node.gas} gas` : "";
+  const content = (
+    <>
+      <span className="trace-kind">{kind}</span>
+      <span className="trace-main">{main}</span>
+      <span className="trace-meta">{meta}</span>
+    </>
+  );
 
   if (!hasChildren) {
-    return (
-      <div className="trace-leaf">
-        <span className="trace-kind">{props.node.kind}</span>
-        <span className="trace-main">
-          {main}
-        </span>
-        <span className="trace-meta">{meta}</span>
-      </div>
-    );
+    return <div className="trace-leaf">{content}</div>;
   }
 
   return (
     <details className="trace-node" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary>
-        <span className="trace-kind">{props.node.kind}</span>
-        <span className="trace-main">
-          {main}
-        </span>
-        <span className="trace-meta">{meta}</span>
-      </summary>
+      <summary>{content}</summary>
       <div className="trace-children">
         {props.node.children?.map((child, index) => (
           <TraceNodeView
@@ -109,7 +102,7 @@ function traceLabel(node: TraceNode, addressLabels: AddressLabels, explorerBaseU
         ::{node.function ?? "call"}
         {node.arguments ? (
           <>
-            (<TraceArguments value={node.arguments} />)
+            (<TraceArguments addressLabels={addressLabels} explorerBaseUrl={explorerBaseUrl} value={node.arguments} />)
           </>
         ) : null}
       </>
@@ -117,22 +110,30 @@ function traceLabel(node: TraceNode, addressLabels: AddressLabels, explorerBaseU
     if (addressRef) {
       return (
         <>
-          <AddressReference address={addressRef.address} addressLabels={addressLabels} explorerBaseUrl={explorerBaseUrl} />
+          <AddressReference address={addressRef.address} addressLabels={addressLabels} displayLabel={addressRef.label} explorerBaseUrl={explorerBaseUrl} />
           {suffix}
         </>
       );
     }
+    const target = resolveLabelAlias(node.target ?? "unknown", addressLabels);
     return (
       <>
-        {node.target ?? "unknown"}
+        {looksLikeTraceLabel(target) ? <span className="address-reference-text">{target}</span> : target}
         {suffix}
       </>
     );
   }
   if (node.kind === "event") {
-    return withoutEmitPrefix(node.value ?? node.raw);
+    return <TraceArguments addressLabels={addressLabels} explorerBaseUrl={explorerBaseUrl} value={withoutEmitPrefix(node.value ?? node.raw)} />;
   }
-  return node.value || node.raw;
+  return <TraceArguments addressLabels={addressLabels} explorerBaseUrl={explorerBaseUrl} value={resultDisplayValue(node)} />;
+}
+
+function traceKindLabel(node: TraceNode): string {
+  if (node.kind === "call" && node.callType) {
+    return node.callType;
+  }
+  return node.kind;
 }
 
 function withoutEmitPrefix(value: string): string {
@@ -143,36 +144,52 @@ function shouldOpenAtDepth(depth: number, expandDepth: number): boolean {
   return depth < expandDepth;
 }
 
-function mainCallTrace(nodes: TraceNode[], target: string, addressLabels: AddressLabels): TraceNode[] {
-  const targetAddress = resolveAddressReference(target, addressLabels)?.address.toLowerCase() ?? target.trim().toLowerCase();
-  if (!targetAddress) {
-    return visibleTrace(nodes);
-  }
-
+function mainCallTrace(nodes: TraceNode[]): TraceNode[] {
   for (let index = nodes.length - 1; index >= 0; index -= 1) {
-    const found = findLastMatchingCall(nodes[index], targetAddress, addressLabels);
-    if (found) {
-      return visibleTrace([found]);
+    const node = nodes[index];
+    if (isScriptWrapperCall(node)) {
+      const child = scriptMainCall(node.children ?? []);
+      return child ? visibleTrace([child]) : [];
+    }
+    if (node.kind === "call") {
+      return visibleTrace([node]);
     }
   }
-  return visibleTrace(nodes);
+  return [];
 }
 
-function findLastMatchingCall(node: TraceNode, targetAddress: string, addressLabels: AddressLabels): TraceNode | undefined {
-  for (let index = (node.children?.length ?? 0) - 1; index >= 0; index -= 1) {
-    const found = findLastMatchingCall(node.children![index], targetAddress, addressLabels);
-    if (found) {
-      return found;
+function scriptMainCall(nodes: TraceNode[]): TraceNode | undefined {
+  const getRecordedLogsIndex = findLastCallFunction(nodes, "getRecordedLogs");
+  if (getRecordedLogsIndex > 0) {
+    return lastDirectCall(nodes.slice(0, getRecordedLogsIndex));
+  }
+  return lastDirectCall(nodes);
+}
+
+function findLastCallFunction(nodes: TraceNode[], name: string): number {
+  for (let index = nodes.length - 1; index >= 0; index -= 1) {
+    if (isCallFunction(nodes[index], name)) {
+      return index;
     }
   }
+  return -1;
+}
 
-  if (node.kind === "call") {
-    const callTarget = resolveAddressReference(node.target, addressLabels)?.address.toLowerCase() ?? node.target?.trim().toLowerCase();
-    if (callTarget === targetAddress) {
-      return node;
+function lastDirectCall(nodes: TraceNode[]): TraceNode | undefined {
+  for (let index = nodes.length - 1; index >= 0; index -= 1) {
+    if (nodes[index].kind === "call") {
+      return nodes[index];
     }
   }
   return undefined;
+}
+
+function isScriptWrapperCall(node: TraceNode): boolean {
+  return node.kind === "call" && node.function === "run" && (node.target ?? "").includes("SimulateTxScript");
+}
+
+function isCallFunction(node: TraceNode, name: string): boolean {
+  return node.kind === "call" && node.function === name;
 }
 
 function visibleTrace(nodes: TraceNode[]): TraceNode[] {
@@ -206,5 +223,30 @@ function withoutEmptyResult(node: TraceNode): TraceNode | undefined {
 
 function isEmptyResult(node: TraceNode): boolean {
   const kind = node.kind.toLowerCase();
-  return (kind === "return" || kind === "stop" || kind === "result") && !node.value?.trim();
+  return isResultKind(kind) && !resultDisplayValue(node);
+}
+
+function isResultKind(kind: string): boolean {
+  return kind === "return" || kind === "stop" || kind === "result";
+}
+
+function resultDisplayValue(node: TraceNode): string {
+  const value = node.value?.trim() ?? "";
+  if (value) {
+    return isResultEcho(value, node) ? "" : value;
+  }
+  const raw = node.raw.trim();
+  if (isResultEcho(raw, node)) {
+    return "";
+  }
+  return raw;
+}
+
+function isResultEcho(value: string, node: TraceNode): boolean {
+  const resultType = (node.resultType || node.kind).trim();
+  if (!resultType) {
+    return false;
+  }
+  const normalized = value.replace(/^←\s*/, "").trim().toLowerCase();
+  return normalized === `[${resultType.toLowerCase()}]`;
 }

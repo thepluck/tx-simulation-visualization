@@ -166,6 +166,7 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 		resp.Error = err.Error()
 		return finish(http.StatusBadRequest)
 	}
+	etherscanAPIKey := strings.TrimSpace(s.cfg.EtherscanAPIKey)
 	source, contractName := req.StateOverrideSourceAndName()
 	hasStateOverride := strings.TrimSpace(source) != ""
 	slog.Info(
@@ -183,7 +184,7 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 		"erc20_approval_overrides", len(req.ERC20ApprovalOverrides),
 		"erc721_approval_overrides", len(req.ERC721ApprovalOverrides),
 		"has_state_override", hasStateOverride,
-		"has_etherscan_key", req.EtherscanAPIKey != "",
+		"has_etherscan_key", etherscanAPIKey != "",
 	)
 
 	timeout := time.Duration(s.cfg.TimeoutSeconds) * time.Second
@@ -286,9 +287,10 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 		"--color", "never",
 		"--non-interactive",
 	)
-	forgeArgs = append(forgeArgs, solidity.ForgeCompilerArgs(req.Compiler)...)
-	if req.EtherscanAPIKey != "" {
-		forgeArgs = append(forgeArgs, "--etherscan-api-key", req.EtherscanAPIKey)
+	compilerArgs := solidity.ForgeCompilerArgs(req.Compiler)
+	forgeArgs = append(forgeArgs, compilerArgs...)
+	if etherscanAPIKey != "" {
+		forgeArgs = append(forgeArgs, "--etherscan-api-key", etherscanAPIKey)
 	}
 
 	slog.Info(
@@ -297,7 +299,7 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 		"root", execution.Root,
 		"script_target", execution.ScriptTarget,
 		"anvil_rpc", anvilRPCURL,
-		"compiler_args", len(solidity.ForgeCompilerArgs(req.Compiler)),
+		"compiler_args", len(compilerArgs),
 	)
 	result := s.forge.Run(ctx, forgeArgs...)
 	logForgeResult(runID, "forge script", result)
@@ -329,7 +331,8 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 	slog.Info(
 		"balance analysis completed",
 		"run_id", runID,
-		"priced_tokens", len(priceMap),
+		"price_metadata_tokens", len(priceMap),
+		"usd_priced_tokens", fundflow.CountUSDPrices(priceMap),
 		"balance_changes", balanceChanges,
 		"user_totals", userTotals,
 	)
@@ -339,7 +342,6 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 
 func (s *Service) validateRequest(req *model.SimulateRequest) (string, error) {
 	req.Chain = strings.TrimSpace(req.Chain)
-	req.EtherscanAPIKey = strings.TrimSpace(req.EtherscanAPIKey)
 	projectPath, err := s.normalizeProjectPath(req.ProjectPath)
 	if err != nil {
 		return "", err
@@ -591,8 +593,41 @@ func (s *Service) fetchTokenPrices(ctx context.Context, runID string, chain stri
 			slog.Warn("token price fetch failed", "run_id", runID, "chain", chain, "token_count", len(tokens), "error", err)
 		}
 	}
-	slog.Info("token price fetch completed", "run_id", runID, "chain", chain, "token_count", len(tokens), "priced_tokens", len(priceMap))
+	slog.Info(
+		"token price fetch completed",
+		"run_id", runID,
+		"chain", chain,
+		"token_count", len(tokens),
+		"price_metadata_tokens", len(priceMap),
+		"usd_priced_tokens", fundflow.CountUSDPrices(priceMap),
+	)
+	logTokenPrices(runID, chain, tokens, priceMap)
 	return priceMap
+}
+
+func logTokenPrices(runID string, chain string, tokens []string, prices map[string]fundflow.TokenPrice) {
+	for _, token := range tokens {
+		token = strings.ToLower(strings.TrimSpace(token))
+		price, ok := prices[token]
+		if !ok {
+			slog.Warn("token price missing", "run_id", runID, "chain", chain, "token", token)
+			continue
+		}
+		attrs := []any{
+			"run_id", runID,
+			"chain", chain,
+			"token", token,
+			"symbol", price.Symbol,
+			"has_decimals", price.HasDecimals,
+			"decimals", price.Decimals,
+			"price_usd", price.PriceUSD,
+		}
+		if price.PriceUSD <= 0 {
+			slog.Warn("token price missing usd", attrs...)
+			continue
+		}
+		slog.Info("token price ready", attrs...)
+	}
 }
 
 func logForgeResult(runID string, stage string, result forge.Result) {

@@ -40,7 +40,7 @@ TXSIM_LISTEN_ADDR=127.0.0.1:18080 go run ./cmd/server
 
 The server loads config from `TXSIM_CONFIG` when set. Otherwise it searches for `config.yaml`, `backend/config.yaml`, `config.yml`, `backend/config.yml`, then example YAML files.
 
-Use `config.example.yaml` as the starting point. The backend loads `.env` from the repo root and `backend/.env` with `gotenv`, then environment variables override config values. Top-level backend settings use `TXSIM_` names such as `TXSIM_LISTEN_ADDR`, `TXSIM_WORK_DIR`, and `TXSIM_MAX_CONCURRENT_RUNS`. Chain endpoints use the existing chain-specific names such as `MAINNET_RPC_URL`, `BASE_RPC_URL`, and `MAINNET_EXPLORER_URL`; requests only need to pass a chain name. `explorer_urls` maps the same chain names to block explorer base URLs for frontend address links. Set `COINGECKO_API_KEY` in `.env` if you want CoinGecko requests to include a demo API key.
+Use `config.example.yaml` as the starting point. The backend loads `.env` from the repo root and `backend/.env` with `gotenv`, then environment variables override config values. Top-level backend settings use `TXSIM_` names such as `TXSIM_LISTEN_ADDR`, `TXSIM_WORK_DIR`, and `TXSIM_MAX_CONCURRENT_RUNS`. Chain endpoints use the existing chain-specific names such as `MAINNET_RPC_URL`, `BASE_RPC_URL`, and `MAINNET_EXPLORER_URL`; requests only need to pass a chain name. `explorer_urls` maps the same chain names to block explorer base URLs for frontend address links. `etherscan_api_key` is backend-side only and maps to `forge script --etherscan-api-key`; set `ETHERSCAN_API_KEY` in `.env` for Etherscan API v2 across chains. Set `COINGECKO_API_KEY` in `.env` if you want CoinGecko requests to include a demo API key.
 
 `project_cache_path` stores recently used Foundry project paths. Local runs default to `backend/.runs/projects.json`; Docker uses `/data/runs/projects.json`, which is persisted by the `backend-runs` volume.
 
@@ -100,14 +100,12 @@ Inside Docker, native project browsing is unavailable because the backend runs i
   ],
   "stateOverride": {
     "contractName": "MyStateOverride",
-    "source": "// SPDX-License-Identifier: UNLICENSED\npragma solidity ^0.8.30;\ncontract MyStateOverride { fallback() external {} }"
+    "source": "// SPDX-License-Identifier: UNLICENSED\npragma solidity ^0.8.0;\ncontract MyStateOverride { fallback() external {} }"
   },
   "compiler": {
-    "use": "0.8.30",
     "viaIR": true,
     "optimize": true,
     "optimizerRuns": 200,
-    "evmVersion": "cancun",
     "revertStrings": "default"
   },
   "sender": "0x0000000000000000000000000000000000000000",
@@ -124,8 +122,8 @@ Inside Docker, native project browsing is unavailable because the backend runs i
 
 `projectPath` is optional. When provided, the backend treats it as another Foundry project, runs `forge build src --root <projectPath>`, copies `contracts/src/SimulateTx.s.sol` into a temporary file under `<projectPath>/script/`, runs `forge script` against that copied script with `--root <projectPath>`, then removes the temporary script file. Relative paths are resolved against the backend repo root. Paths beginning with `~` are expanded to the backend process user's home directory before validation.
 
-`compiler` is optional and maps to popular Forge compiler flags. Supported fields are `use`, `offline`, `noAutoDetect`, `viaIR`, `useLiteralContent`, `noMetadata`, `evmVersion`, `optimize`, `optimizerRuns`, and `revertStrings`. The state override `forge inspect` compile and final `forge script` run default `viaIR` and `optimize` to `true`; external-project `forge build src` uses the target project's defaults unless compiler fields are explicitly set.
+`compiler` is optional and maps to popular Forge compiler flags. Supported fields are `use`, `offline`, `noAutoDetect`, `viaIR`, `useLiteralContent`, `noMetadata`, `evmVersion`, `optimize`, `optimizerRuns`, and `revertStrings`. The backend only passes `use` and `evmVersion` when they are explicitly provided. The state override `forge inspect` compile and final `forge script` run default `viaIR` and `optimize` to `true`; external-project `forge build src` uses the target project's defaults unless compiler fields are explicitly set.
 
 The response includes `erc20Transfers`, parsed from ERC20-style `Transfer(from, to, value)` trace events for later fund flow graph construction. Each item contains `token`, `from`, `to`, raw `amount`, and, when metadata is available, `normalizedAmount`, `symbol`, and `logoUrl`.
 
-The response also includes `balanceAnalysis`, which aggregates ERC20 transfers into signed per-user token balance changes. It fetches token decimals and symbols from the configured chain RPC, then merges current USD prices and metadata from DefiLlama, CoinGecko, and DexScreener. Trust Wallet token logo URLs are used as a fallback when the token address can be checksummed. USD values are only calculated when both a price and token decimals are available.
+The response also includes `balanceAnalysis`, which aggregates ERC20 transfers into signed per-user token balance changes. It fetches token decimals and symbols from the configured chain RPC, gets current USD prices from DefiLlama and CoinGecko, and may use DexScreener only for token display metadata such as symbol/logo. Trust Wallet token logo URLs are used as a fallback when the token address can be checksummed. USD values are only calculated when both a price and token decimals are available.

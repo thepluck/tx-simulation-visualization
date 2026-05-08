@@ -14,7 +14,6 @@ type OutputPanelProps = {
   outputView: OutputView;
   response: SimulateResponse | null;
   runMeta: string;
-  target: string;
   onExpandDepthChange: Dispatch<SetStateAction<number>>;
   onExpandModeChange: Dispatch<SetStateAction<ExpandMode>>;
   onOutputViewChange: Dispatch<SetStateAction<OutputView>>;
@@ -29,7 +28,6 @@ export default function OutputPanel(props: OutputPanelProps) {
     outputView,
     response,
     runMeta,
-    target,
     onExpandDepthChange,
     onExpandModeChange,
     onOutputViewChange
@@ -115,7 +113,6 @@ export default function OutputPanel(props: OutputPanelProps) {
             expandDepth={expandDepth}
             explorerBaseUrl={explorerBaseUrl}
             nodes={response?.structuredTrace ?? []}
-            target={target}
             expandMode={expandMode}
           />
         </section>

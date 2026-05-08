@@ -22,6 +22,7 @@ type Config struct {
 	AnvilBin         string            `mapstructure:"anvil_bin" yaml:"anvil_bin"`
 	AnvilHost        string            `mapstructure:"anvil_host" yaml:"anvil_host"`
 	AnvilPortStart   int               `mapstructure:"anvil_port_start" yaml:"anvil_port_start"`
+	EtherscanAPIKey  string            `mapstructure:"etherscan_api_key" yaml:"etherscan_api_key"`
 	RPCURLs          map[string]string `mapstructure:"rpc_urls" yaml:"rpc_urls"`
 	ExplorerURLs     map[string]string `mapstructure:"explorer_urls" yaml:"explorer_urls"`
 }
@@ -96,6 +97,10 @@ func Load() (Config, string, error) {
 	cfg.ForgeBin = strings.TrimSpace(cfg.ForgeBin)
 	cfg.AnvilBin = strings.TrimSpace(cfg.AnvilBin)
 	cfg.AnvilHost = strings.TrimSpace(cfg.AnvilHost)
+	cfg.EtherscanAPIKey = strings.TrimSpace(os.ExpandEnv(cfg.EtherscanAPIKey))
+	if cfg.EtherscanAPIKey == "" {
+		cfg.EtherscanAPIKey = strings.TrimSpace(os.Getenv("ETHERSCAN_API_KEY"))
+	}
 	if cfg.AnvilPortStart < 0 {
 		return Config{}, "", errors.New("anvil_port_start must be positive")
 	}
@@ -134,12 +139,13 @@ func newConfigViper(path string) *viper.Viper {
 	v.SetDefault("listen_addr", "127.0.0.1:8080")
 	v.SetDefault("repo_root", "..")
 	v.SetDefault("work_dir", ".runs")
-	v.SetDefault("timeout_seconds", 120)
+	v.SetDefault("timeout_seconds", 300)
 	v.SetDefault("max_concurrent_runs", 1)
 	v.SetDefault("forge_bin", "forge")
 	v.SetDefault("anvil_bin", "anvil")
 	v.SetDefault("anvil_host", "127.0.0.1")
 	v.SetDefault("anvil_port_start", 18545)
+	v.SetDefault("etherscan_api_key", "")
 	v.SetEnvPrefix("TXSIM")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	v.AutomaticEnv()
@@ -155,6 +161,7 @@ func newConfigViper(path string) *viper.Viper {
 		"anvil_bin",
 		"anvil_host",
 		"anvil_port_start",
+		"etherscan_api_key",
 	} {
 		_ = v.BindEnv(key)
 	}

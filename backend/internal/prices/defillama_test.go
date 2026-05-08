@@ -38,6 +38,31 @@ func TestDefiLlamaProviderFetch(t *testing.T) {
 	}
 }
 
+func TestDefiLlamaProviderFetchBaseUSDC(t *testing.T) {
+	token := "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/prices/current/base:"+token {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"coins":{"base:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913":{"price":0.9998,"decimals":6,"symbol":"USDC"}}}`))
+	}))
+	defer server.Close()
+
+	provider := DefiLlamaProvider{BaseURL: server.URL + "/prices/current/"}
+	got, err := provider.Fetch(context.Background(), "base", []string{token})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	price, ok := got[token]
+	if !ok {
+		t.Fatalf("missing price: %#v", got)
+	}
+	if price.PriceUSD != 0.9998 || price.Decimals != 6 || !price.HasDecimals || price.Symbol != "USDC" {
+		t.Fatalf("unexpected price: %#v", price)
+	}
+}
+
 func TestDefiLlamaCoinIDs(t *testing.T) {
 	got := defillamaCoinIDs("arbitrum-one", []string{"0xB", "0xa", "0xB"})
 	want := []string{"arbitrum:0xa", "arbitrum:0xb"}

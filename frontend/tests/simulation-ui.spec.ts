@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const apiURL = "http://127.0.0.1:8080";
 const explorerURL = "https://explorer.test";
@@ -50,7 +50,7 @@ test("uses configured explorer links and renders only the last main call subtree
   await page.route(`${apiURL}/simulate`, async (route) => {
     const request = route.request().postDataJSON() as { etherscanApiKey?: string; labelOverrides?: Array<{ account: string; label: string }> };
     expect(request.labelOverrides).toContainEqual({ account: spender, label: "Sender" });
-    expect(request.etherscanApiKey).toBe("etherscan-test-key");
+    expect(request.etherscanApiKey).toBeUndefined();
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -80,8 +80,7 @@ test("uses configured explorer links and renders only the last main call subtree
   await addLabel(page, owner, "WETHOwner");
   await addLabel(page, recipient, "WETHRecipient");
   await page.getByRole("button", { name: "Compiler" }).click();
-  await page.getByLabel("Etherscan API Key").fill("etherscan-test-key");
-  await expect(page.getByLabel("Etherscan API Key")).toHaveValue("etherscan-test-key");
+  await expect(page.getByLabel("Solc")).toBeVisible();
 
   await page.reload();
   await expect(page.getByText("online")).toBeVisible();
@@ -91,16 +90,21 @@ test("uses configured explorer links and renders only the last main call subtree
   await expect(page.getByLabel("Sender")).toHaveValue(spender);
   await expect(page.getByLabel("Target")).toHaveValue(token);
   await expect(page.getByLabel("Calldata")).toHaveValue("0x23b872dd");
-  await expect(page.getByLabel("Etherscan API Key")).toHaveValue("etherscan-test-key");
+  await page.getByRole("button", { name: "Compiler" }).click();
+  await expect(page.getByLabel("Solc")).toBeVisible();
 
   await page.getByRole("button", { name: "Run Simulation" }).click();
   await expect(page.getByText("success |")).toBeVisible();
 
   await expect(page.getByRole("img", { name: "Fund flow graph" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("success | 12ms | exit 0 | browser-test")).toBeVisible();
+  await expect(page.getByRole("img", { name: "Fund flow graph" })).toBeVisible();
+
   await expect(page.locator(`.flow-svg a[href="${explorerURL}/address/${owner}"]`)).toHaveCount(1);
   await expect(page.locator(`.flow-svg a[href="${explorerURL}/address/${recipient}"]`)).toHaveCount(1);
-  await expect(page.locator(`.edge-table a[href="${explorerURL}/address/${owner}"]`)).toHaveCount(50);
-  await expect(page.locator(".edge-table tbody tr").nth(0).locator(`a[href="${explorerURL}/address/${owner}"]`)).toHaveText("WETHOwner");
+  await expect(page.locator(`.edge-table .address-reference-card-link[href="${explorerURL}/address/${owner}"]`)).toHaveCount(50);
+  await expect(page.locator(".edge-table tbody tr").nth(0).locator(".address-reference-text").first()).toHaveText("WETHOwner");
 
   await page.evaluate(() => {
     window.scrollTo(0, 360);
@@ -110,12 +114,34 @@ test("uses configured explorer links and renders only the last main call subtree
 
   await clickOutputTab(page, "Trace");
   await expect(page.locator(".trace-tree")).toContainText("transferFrom");
+  await expect(page.locator(".trace-tree")).toContainText("UnmappedToken");
   await expect(page.locator(".trace-tree")).toContainText("Transfer(from:");
+  await expect(page.locator(".trace-tree")).toContainText("callTarget:");
+  await expect(page.locator(".trace-tree")).not.toContainText("WETH9");
+  await expect(page.locator(".trace-tree")).not.toContainText("TraceRecipient");
+  await expect(page.locator(".trace-tree")).not.toContainText(`WETHRecipient: [${recipient}]`);
   await expect(page.locator(".trace-tree")).not.toContainText("emit Transfer");
   await expect(page.locator(".trace-tree")).not.toContainText("approve");
+  await expect(page.locator(".trace-tree")).not.toContainText("TXSIM_LOG");
+  await expect(page.locator(".trace-tree")).not.toContainText("console2");
+  await expect(page.locator(".trace-tree")).not.toContainText("getRecordedLogs");
+  await expect(page.locator(".trace-tree")).not.toContainText("SimulateTxScript");
   await expect(page.locator(".trace-tree")).not.toContainText("[Return]");
-  await expect(page.locator(`.trace-tree a[href="${explorerURL}/address/${token}"]`)).toHaveCount(1);
-  await expect(page.locator(`.trace-tree a[href="${explorerURL}/address/${spender}"]`)).toHaveText("Sender");
+  await expect(page.locator(".trace-tree")).not.toContainText("[Stop]");
+  await expect(page.locator(".trace-tree")).not.toContainText("delegatecall | 400 gas");
+  await expect(page.locator(".trace-tree > .trace-node > summary .trace-kind").first()).toHaveText("delegatecall");
+  await expect(page.locator(".trace-tree > .trace-node > summary .trace-meta").first()).toHaveText("400 gas");
+  await expect(page.locator(".trace-tree .address-reference-text").filter({ hasText: "callTarget" })).toHaveCount(0);
+  await expect(page.locator(`.trace-tree .address-reference-card-link[href="${explorerURL}/address/${token}"]`)).toHaveCount(2);
+  const tokenReference = page
+    .locator(".trace-tree .address-reference")
+    .filter({ has: page.locator(`.address-reference-card-link[href="${explorerURL}/address/${token}"]`) })
+    .first();
+  await expect(tokenReference.locator(".address-reference-text")).toHaveText("WETH");
+  await expect(page.locator(".trace-tree .address-reference").filter({ hasText: "WETHRecipient" }).first()).toBeVisible();
+  await expect(page.locator(".trace-tree .address-reference").filter({ hasText: "Sender" }).first()).toBeVisible();
+  await expect(page.locator(".trace-tree .trace-main > .address-reference-text").filter({ hasText: "UnmappedToken" })).toHaveCount(1);
+  await expect(page.locator(".trace-tree .trace-main > .address-reference-text").filter({ hasText: "MetaAggregationRouterV2" })).toHaveCount(1);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(flowScrollTop);
   await expectTraceDepth(page, 1, [true, false]);
 
@@ -141,8 +167,9 @@ test("uses configured explorer links and renders only the last main call subtree
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(flowScrollTop);
 
   await page.getByRole("button", { name: "Balances" }).click();
-  await expect(page.locator(`.balance-analysis-table a[href="${explorerURL}/address/${recipient}"]`)).toHaveText("WETHRecipient");
-  await expectAddressTooltipStaysOpen(page, "WETHRecipient");
+  await expect(page.locator(".balance-analysis-table .address-reference").filter({ hasText: "WETHRecipient" }).first()).toBeVisible();
+  await expectAddressTooltipStaysOpen(page, "WETHRecipient", recipient);
+  await expectAddressTooltipClampsToViewport(page, "WETHRecipient", recipient);
 });
 
 async function routeBaseEndpoints(page: Page) {
@@ -187,17 +214,59 @@ async function addLabel(page: Page, account: string, label: string) {
   await row.getByLabel("Label").fill(label);
 }
 
-async function expectAddressTooltipStaysOpen(page: Page, label: string) {
-  const reference = page.locator(".address-reference").filter({ has: page.getByRole("link", { name: label }) }).first();
+async function expectAddressTooltipStaysOpen(page: Page, label: string, address: string) {
+  const reference = page.locator(".address-reference").filter({ hasText: label }).first();
   await reference.hover();
 
   const card = reference.locator(".address-reference-card");
   await expect(card).toBeVisible();
+  await expect(card.locator(".address-reference-card-row")).toHaveCSS("flex-wrap", "nowrap");
+  await expect(card.locator(`a[href="${explorerURL}/address/${address}"]`)).toHaveText(address);
+  await expect(card.getByRole("button", { name: `Copy ${address}` })).toBeVisible();
+  await expect(card.locator(".address-reference-card-label")).toHaveCount(0);
+  await expect(card).not.toContainText(label);
 
   const box = await card.boundingBox();
   expect(box).not.toBeNull();
+  await expectLocatorInsideViewport(page, card);
   await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2, { steps: 8 });
   await expect(card).toBeVisible();
+}
+
+async function expectAddressTooltipClampsToViewport(page: Page, label: string, address: string) {
+  const originalViewport = page.viewportSize();
+  await page.setViewportSize({ width: 260, height: 180 });
+  try {
+    const reference = page.locator(".address-reference").filter({ hasText: label }).first();
+    await reference.evaluate((element) => {
+      const target = element as HTMLElement;
+      target.style.position = "fixed";
+      target.style.right = "2px";
+      target.style.bottom = "2px";
+      target.style.zIndex = "1000";
+    });
+    await reference.hover();
+
+    const card = reference.locator(".address-reference-card");
+    await expect(card).toBeVisible();
+    await expect(card.locator(`a[href="${explorerURL}/address/${address}"]`)).toHaveText(address);
+    await expectLocatorInsideViewport(page, card);
+  } finally {
+    if (originalViewport) {
+      await page.setViewportSize(originalViewport);
+    }
+  }
+}
+
+async function expectLocatorInsideViewport(page: Page, locator: Locator) {
+  const box = await locator.boundingBox();
+  const viewport = page.viewportSize();
+  expect(box).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(viewport!.width + 1);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.height + 1);
 }
 
 async function expectTraceDepth(page: Page, depth: number, expectedOpenStates: boolean[]) {
@@ -211,9 +280,9 @@ async function expectTraceDepth(page: Page, depth: number, expectedOpenStates: b
 
 function simulateResponse() {
   const eventChildren = Array.from({ length: 50 }, (_, index) => ({
-    raw: `emit Transfer(from: ${owner}, to: ${recipient}, value: ${index + 1})`,
+    raw: `emit Transfer(from: WETHOwner: [${owner}], to: TraceRecipient: [${recipient}], value: ${index + 1})`,
     kind: "event",
-    value: `Transfer(from: ${owner}, to: ${recipient}, value: ${index + 1})`
+    value: `Transfer(from: WETHOwner: [${owner}], to: TraceRecipient: [${recipient}], value: ${index + 1})`
   }));
   const transfers = Array.from({ length: 50 }, () => ({
     token,
@@ -248,23 +317,40 @@ function simulateResponse() {
             arguments: `${spender}, 1000000000000000000`
           },
           {
-            raw: `[400] ${token}::transferFrom(${owner}, ${recipient}, 1000000000000000000)`,
+            raw: "[0] VM::recordLogs()",
             kind: "call",
+            gas: 0,
+            target: "VM",
+            function: "recordLogs"
+          },
+          {
+            raw: `[0] VM::prank(Sender: [${spender}])`,
+            kind: "call",
+            gas: 0,
+            target: "VM",
+            function: "prank",
+            arguments: `Sender: [${spender}]`
+          },
+          {
+            raw: `[400] WETH9::transferFrom(srcToken: WETH9: [${token}], ${owner}, ${recipient}, 1000000000000000000)`,
+            kind: "call",
+            callType: "delegatecall",
             gas: 400,
-            target: token,
+            target: "WETH9",
             function: "transferFrom",
-            arguments: `${owner}, ${recipient}, 1000000000000000000, ${longBytes}`,
+            arguments: `srcToken: WETH9: [${token}], ${owner}, ${recipient}, 1000000000000000000, callTarget: [${helper}], ${longBytes}`,
             children: [
               {
-                raw: `[40] ${spender}::fallback()`,
+                raw: `[40] Sender: [${spender}]::fallback()`,
                 kind: "call",
                 gas: 40,
-                target: spender,
+                target: `Sender: [${spender}]`,
                 function: "fallback"
               },
               {
                 raw: `[60] ${helper}::decode(${longBytes})`,
                 kind: "call",
+                callType: "staticcall",
                 gas: 60,
                 target: helper,
                 function: "decode",
@@ -278,12 +364,48 @@ function simulateResponse() {
                   }
                 ]
               },
+              {
+                raw: "[70] MetaAggregationRouterV2::swap()",
+                kind: "call",
+                gas: 70,
+                target: "MetaAggregationRouterV2",
+                function: "swap"
+              },
+              {
+                raw: `[80] UnmappedToken::transfer(${recipient}, 1000000000000000000)`,
+                kind: "call",
+                gas: 80,
+                target: "UnmappedToken",
+                function: "transfer",
+                arguments: `${recipient}, 1000000000000000000`
+              },
               ...eventChildren,
+              {
+                raw: "← [Stop]",
+                kind: "stop",
+                resultType: "Stop",
+                value: "← [Stop]"
+              },
               {
                 raw: "← [Return]",
                 kind: "return"
               }
             ]
+          },
+          {
+            raw: "[0] VM::getRecordedLogs()",
+            kind: "call",
+            gas: 0,
+            target: "VM",
+            function: "getRecordedLogs"
+          },
+          {
+            raw: "[0] console2::log(TXSIM_LOG|0x0000000000000000000000000000000000000000|3)",
+            kind: "call",
+            gas: 0,
+            target: "console2",
+            function: "log",
+            arguments: "TXSIM_LOG|0x0000000000000000000000000000000000000000|3"
           }
         ]
       }

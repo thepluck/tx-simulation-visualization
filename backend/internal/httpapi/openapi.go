@@ -212,8 +212,6 @@ func enrichOpenAPISchemas(schemas openapi3.Schemas) {
 	setPropertyExample(schemas, "SimulateRequest", "chain", "mainnet")
 	setPropertyDescription(schemas, "SimulateRequest", "projectPath", "Optional Foundry project root. When set, the backend runs `forge build src`, copies `contracts/src/SimulateTx.s.sol` under this project's script folder, and runs forge script with this root.")
 	setPropertyExample(schemas, "SimulateRequest", "projectPath", "~/project")
-	setPropertyDescription(schemas, "SimulateRequest", "etherscanApiKey", "Optional Etherscan or Etherscan-equivalent API key passed to `forge script --etherscan-api-key`.")
-	setPropertyFormat(schemas, "SimulateRequest", "etherscanApiKey", "password")
 	setPropertyDeprecated(schemas, "SimulateRequest", "stateOverrideCode")
 	setPropertyDeprecated(schemas, "SimulateRequest", "stateOverrideContractName")
 	setPropertyExample(schemas, "SimulateRequest", "sender", "0x0000000000000000000000000000000000000001")
@@ -237,16 +235,14 @@ func enrichOpenAPISchemas(schemas openapi3.Schemas) {
 	setPropertyExample(schemas, "ERC721ApprovalOverride", "spender", "0x0000000000000000000000000000000000000002")
 	setPropertyExample(schemas, "StateOverride", "contractName", "MyStateOverride")
 
-	setPropertyDescription(schemas, "CompilerConfig", "use", "Maps to forge script --use <SOLC_VERSION>.")
-	setPropertyExample(schemas, "CompilerConfig", "use", "0.8.30")
+	setPropertyDescription(schemas, "CompilerConfig", "use", "Maps to forge script --use <SOLC_VERSION>. Omitted unless explicitly provided.")
 	setPropertyDescription(schemas, "CompilerConfig", "offline", "Maps to --offline.")
 	setPropertyDescription(schemas, "CompilerConfig", "noAutoDetect", "Maps to --no-auto-detect.")
 	setPropertyDescription(schemas, "CompilerConfig", "viaIR", "Maps to --via-ir. Defaults to true for this backend.")
 	setPropertyDefault(schemas, "CompilerConfig", "viaIR", true)
 	setPropertyDescription(schemas, "CompilerConfig", "useLiteralContent", "Maps to --use-literal-content.")
 	setPropertyDescription(schemas, "CompilerConfig", "noMetadata", "Maps to --no-metadata.")
-	setPropertyDescription(schemas, "CompilerConfig", "evmVersion", "Maps to --evm-version <VERSION>.")
-	setPropertyExample(schemas, "CompilerConfig", "evmVersion", "cancun")
+	setPropertyDescription(schemas, "CompilerConfig", "evmVersion", "Maps to --evm-version <VERSION>. Omitted unless explicitly provided.")
 	setPropertyDescription(schemas, "CompilerConfig", "optimize", "Maps to --optimize. Defaults to true for this backend.")
 	setPropertyDefault(schemas, "CompilerConfig", "optimize", true)
 	setPropertyDescription(schemas, "CompilerConfig", "optimizerRuns", "Maps to --optimizer-runs <RUNS>.")
@@ -368,12 +364,6 @@ func setPropertyDescription(schemas openapi3.Schemas, schemaName string, propert
 func setPropertyExample(schemas openapi3.Schemas, schemaName string, propertyName string, example any) {
 	if property := propertyValue(schemas, schemaName, propertyName); property != nil {
 		property.Example = example
-	}
-}
-
-func setPropertyFormat(schemas openapi3.Schemas, schemaName string, propertyName string, format string) {
-	if property := propertyValue(schemas, schemaName, propertyName); property != nil {
-		property.Format = format
 	}
 }
 

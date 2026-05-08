@@ -17,6 +17,16 @@ type TokenPrice struct {
 	LogoURL     string
 }
 
+func CountUSDPrices(prices map[string]TokenPrice) int {
+	count := 0
+	for _, price := range prices {
+		if price.PriceUSD > 0 {
+			count++
+		}
+	}
+	return count
+}
+
 func AnalyzeBalanceChanges(transfers []model.ERC20Transfer, prices map[string]TokenPrice) *model.BalanceAnalysis {
 	if len(transfers) == 0 {
 		return nil
@@ -62,13 +72,17 @@ func AnalyzeBalanceChanges(transfers []model.ERC20Transfer, prices map[string]To
 			if price.HasDecimals {
 				change.Amount = formatTokenAmount(rawAmount, price.Decimals)
 			}
-			if price.HasDecimals && price.PriceUSD > 0 {
+			priceUSD := price.PriceUSD
+			if priceUSD <= 0 && IsStablecoinSymbol(price.Symbol) {
+				priceUSD = 1
+			}
+			if price.HasDecimals && priceUSD > 0 {
 				amountFloat, ok := tokenAmountFloat(rawAmount, price.Decimals)
 				if !ok {
 					changes = append(changes, change)
 					continue
 				}
-				usdValue := amountFloat * price.PriceUSD
+				usdValue := amountFloat * priceUSD
 				change.USDValue = &usdValue
 				userTotals[user] += usdValue
 			}
@@ -135,6 +149,15 @@ func tokenAmountFloat(rawAmount *big.Int, decimals int) (float64, bool) {
 	}
 	denominator := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
 	value := new(big.Rat).SetFrac(rawAmount, denominator)
-	floatValue, ok := value.Float64()
-	return floatValue, ok && !math.IsInf(floatValue, 0) && !math.IsNaN(floatValue)
+	floatValue, _ := value.Float64()
+	return floatValue, !math.IsInf(floatValue, 0) && !math.IsNaN(floatValue)
+}
+
+func IsStablecoinSymbol(symbol string) bool {
+	switch strings.ToUpper(strings.TrimSpace(symbol)) {
+	case "USDC", "USDBC", "USDT", "DAI", "USDE", "USDS", "FRAX", "LUSD", "SUSD", "PYUSD", "GHO", "USDP":
+		return true
+	default:
+		return false
+	}
 }

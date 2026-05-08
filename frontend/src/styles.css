@@ -682,53 +682,116 @@ button:focus-visible {
   height: 8px;
 }
 
-.address-reference-link,
 .address-reference-text {
   color: var(--blue);
   font-weight: 800;
   text-decoration: none;
 }
 
-.address-reference-link:hover {
-  text-decoration: underline;
+.address-reference:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid rgba(15, 118, 110, 0.28);
+  outline-offset: 1px;
 }
 
 .address-reference-card {
-  position: absolute;
+  position: fixed;
   z-index: 20;
-  left: 0;
-  top: calc(100% + 8px);
   display: none;
-  min-width: 270px;
-  max-width: 360px;
+  width: max-content;
+  max-width: min(420px, calc(100vw - 16px));
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--surface);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
-  padding: 10px;
+  padding: 6px;
+  overflow: hidden;
 }
 
-.address-reference:hover .address-reference-card,
-.address-reference:focus-within .address-reference-card {
-  display: grid;
-  gap: 5px;
+.address-reference.active .address-reference-card {
+  display: inline-flex;
 }
 
-.address-reference:hover::after,
-.address-reference:focus-within::after {
+.address-reference.active::after {
   display: block;
 }
 
-.address-reference-card span {
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 800;
+.address-reference-card-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.address-reference-card-link {
+  min-width: 0;
+  max-width: min(344px, calc(100vw - 92px));
+  color: var(--blue);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.address-reference-card-link:hover {
+  text-decoration: underline;
 }
 
 .address-reference-card code {
-  overflow-wrap: anywhere;
+  max-width: min(344px, calc(100vw - 92px));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--muted);
   font-size: 12px;
+}
+
+.address-copy-button {
+  position: relative;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface-alt);
+  color: var(--text);
+  padding: 0;
+}
+
+.address-copy-button:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.address-copy-button::before,
+.address-copy-button::after {
+  content: "";
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  background: var(--surface-alt);
+}
+
+.address-copy-button::before {
+  left: 7px;
+  top: 6px;
+}
+
+.address-copy-button::after {
+  left: 5px;
+  top: 8px;
+}
+
+.address-copy-button.copied {
+  border-color: rgba(8, 116, 67, 0.36);
+  color: var(--ok);
 }
 
 .data-table {

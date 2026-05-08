@@ -35,7 +35,7 @@ Then open:
 - Backend: `http://127.0.0.1:8080`
 - Swagger UI: `http://127.0.0.1:8080/docs`
 
-The Compose stack reads `.env` for `MAINNET_RPC_URL`, `BASE_RPC_URL`, `ARBITRUM_RPC_URL`, and optional `COINGECKO_API_KEY`. Backend environment variables override YAML config values: use `TXSIM_` names for top-level backend settings and chain-specific names such as `MAINNET_RPC_URL` for RPC endpoints.
+The Compose stack reads `.env` for `MAINNET_RPC_URL`, `BASE_RPC_URL`, `ARBITRUM_RPC_URL`, optional `ETHERSCAN_API_KEY`, and optional `COINGECKO_API_KEY`. Backend environment variables override YAML config values: use `TXSIM_` names for top-level backend settings and chain-specific names such as `MAINNET_RPC_URL` for RPC endpoints.
 
 Docker stores recently used Foundry project paths in the `backend-runs` volume at `/data/runs/projects.json`, so project suggestions survive container rebuilds.
 

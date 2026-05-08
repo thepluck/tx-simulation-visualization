@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
@@ -66,18 +67,31 @@ func (p DefiLlamaProvider) Fetch(ctx context.Context, chain string, tokens []str
 	out := make(map[string]fundflow.TokenPrice)
 	for coinID, price := range payload.Coins {
 		if price.Price <= 0 {
+			slog.Warn("defillama price missing usd", "chain", chain, "coin_id", coinID, "price_usd", price.Price, "symbol", strings.TrimSpace(price.Symbol))
 			continue
 		}
 		_, token, ok := strings.Cut(coinID, ":")
 		if !ok {
 			continue
 		}
-		out[strings.ToLower(token)] = fundflow.TokenPrice{
+		normalizedToken := strings.ToLower(token)
+		out[normalizedToken] = fundflow.TokenPrice{
 			PriceUSD:    price.Price,
 			Decimals:    price.Decimals,
 			HasDecimals: true,
 			Symbol:      strings.TrimSpace(price.Symbol),
 			LogoURL:     trustWalletLogoURL(chain, token),
+		}
+		slog.Info("defillama price fetched", "chain", chain, "token", normalizedToken, "price_usd", price.Price, "decimals", price.Decimals, "symbol", strings.TrimSpace(price.Symbol))
+	}
+	for _, coinID := range coins {
+		_, token, ok := strings.Cut(coinID, ":")
+		if !ok {
+			continue
+		}
+		normalizedToken := strings.ToLower(token)
+		if _, ok := out[normalizedToken]; !ok {
+			slog.Warn("defillama price missing token", "chain", chain, "token", normalizedToken, "coin_id", coinID)
 		}
 	}
 	return out, nil

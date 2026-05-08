@@ -2,6 +2,8 @@ package prices
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"sort"
@@ -44,8 +46,17 @@ func (p MultiProvider) Fetch(ctx context.Context, chain string, tokens []string)
 		}
 		fetched, err := provider.Fetch(ctx, chain, normalizedTokens)
 		if err != nil {
+			slog.Warn("token price provider failed", "provider", priceProviderName(provider), "chain", chain, "token_count", len(normalizedTokens), "error", err)
 			continue
 		}
+		slog.Info(
+			"token price provider completed",
+			"provider", priceProviderName(provider),
+			"chain", chain,
+			"token_count", len(normalizedTokens),
+			"returned_tokens", len(fetched),
+			"usd_priced_tokens", fundflow.CountUSDPrices(fetched),
+		)
 		for token, next := range fetched {
 			token = normalizeAddress(token)
 			if token == "" {
@@ -54,6 +65,7 @@ func (p MultiProvider) Fetch(ctx context.Context, chain string, tokens []string)
 			out[token] = mergeTokenPrice(out[token], next)
 		}
 	}
+	applyStablecoinFallback(out)
 	return out, nil
 }
 
@@ -72,6 +84,24 @@ func mergeTokenPrice(existing fundflow.TokenPrice, next fundflow.TokenPrice) fun
 		existing.LogoURL = next.LogoURL
 	}
 	return existing
+}
+
+func applyStablecoinFallback(prices map[string]fundflow.TokenPrice) {
+	for token, price := range prices {
+		if price.PriceUSD > 0 || !fundflow.IsStablecoinSymbol(price.Symbol) {
+			continue
+		}
+		price.PriceUSD = 1
+		prices[token] = price
+		slog.Info("stablecoin price fallback applied", "token", token, "symbol", price.Symbol, "price_usd", price.PriceUSD)
+	}
+}
+
+func priceProviderName(provider Provider) string {
+	name := fmt.Sprintf("%T", provider)
+	name = strings.TrimPrefix(name, "prices.")
+	name = strings.TrimPrefix(name, "*prices.")
+	return name
 }
 
 func isTrustWalletLogoURL(value string) bool {

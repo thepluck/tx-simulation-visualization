@@ -190,7 +190,7 @@ function CompilerTab(props: { form: FormState; onUpdate: UpdateForm }) {
       <div className="two-col">
         <label>
           Solc
-          <input value={form.compilerUse} placeholder="0.8.30" onChange={(event) => onUpdate("compilerUse", event.target.value)} />
+          <input value={form.compilerUse} onChange={(event) => onUpdate("compilerUse", event.target.value)} />
         </label>
         <label>
           Optimizer Runs
@@ -205,7 +205,7 @@ function CompilerTab(props: { form: FormState; onUpdate: UpdateForm }) {
       <div className="two-col">
         <label>
           EVM Version
-          <input value={form.evmVersion} placeholder="cancun" onChange={(event) => onUpdate("evmVersion", event.target.value)} />
+          <input value={form.evmVersion} onChange={(event) => onUpdate("evmVersion", event.target.value)} />
         </label>
         <label>
           Revert Strings
@@ -218,16 +218,6 @@ function CompilerTab(props: { form: FormState; onUpdate: UpdateForm }) {
           </select>
         </label>
       </div>
-      <label>
-        Etherscan API Key
-        <input
-          autoComplete="off"
-          type="password"
-          value={form.etherscanApiKey}
-          placeholder="ETHERSCAN_API_KEY"
-          onChange={(event) => onUpdate("etherscanApiKey", event.target.value)}
-        />
-      </label>
     </section>
   );
 }

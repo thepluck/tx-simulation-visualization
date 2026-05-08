@@ -74,7 +74,6 @@ export const simulateRequestSchema = z.object({
   erc721ApprovalOverrides: z.array(erc721ApprovalOverrideSchema).optional(),
   stateOverride: stateOverrideSchema.optional(),
   compiler: compilerConfigSchema.optional(),
-  etherscanApiKey: z.string().optional(),
   sender: addressSchema,
   target: addressSchema,
   data: bytesSchema

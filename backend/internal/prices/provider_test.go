@@ -27,6 +27,24 @@ func TestMultiProviderMergesPriceMetadata(t *testing.T) {
 	}
 }
 
+func TestMultiProviderAppliesStablecoinFallback(t *testing.T) {
+	token := "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
+	provider := MultiProvider{
+		Providers: []Provider{
+			fakeProvider{token: {Decimals: 6, HasDecimals: true, Symbol: "USDC"}},
+		},
+	}
+
+	got, err := provider.Fetch(context.Background(), "base", []string{token})
+	if err != nil {
+		t.Fatal(err)
+	}
+	price := got[token]
+	if price.PriceUSD != 1 || price.Decimals != 6 || !price.HasDecimals || price.Symbol != "USDC" {
+		t.Fatalf("stablecoin fallback price = %#v", price)
+	}
+}
+
 type fakeProvider map[string]fundflow.TokenPrice
 
 func (p fakeProvider) Fetch(_ context.Context, _ string, _ []string) (map[string]fundflow.TokenPrice, error) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -32,9 +33,15 @@ func (p CoinGeckoProvider) Fetch(ctx context.Context, chain string, tokens []str
 	out := make(map[string]fundflow.TokenPrice)
 	for _, token := range tokens {
 		price, err := p.fetchOne(ctx, platform, token)
-		if err != nil || price.PriceUSD <= 0 {
+		if err != nil {
+			slog.Warn("coingecko price fetch failed", "chain", chain, "platform", platform, "token", token, "error", err)
 			continue
 		}
+		if price.PriceUSD <= 0 {
+			slog.Warn("coingecko price missing token", "chain", chain, "platform", platform, "token", token)
+			continue
+		}
+		slog.Info("coingecko price fetched", "chain", chain, "platform", platform, "token", token, "price_usd", price.PriceUSD)
 		out[token] = price
 	}
 	return out, nil

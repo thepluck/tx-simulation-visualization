@@ -15,6 +15,19 @@ func TestForgeCompilerArgsDefaultsToCurrentCompilePath(t *testing.T) {
 	}
 }
 
+func TestForgeCompilerArgsDoesNotDefaultSolcOrEVMVersion(t *testing.T) {
+	for name, got := range map[string][]string{
+		"nil":   ForgeCompilerArgs(nil),
+		"empty": ForgeCompilerArgs(&model.CompilerConfig{}),
+	} {
+		for _, arg := range got {
+			if arg == "--use" || arg == "--evm-version" {
+				t.Fatalf("%s config args include version flag %#v", name, got)
+			}
+		}
+	}
+}
+
 func TestForgeCompilerArgsUsesRequestConfig(t *testing.T) {
 	viaIR := false
 	optimize := false

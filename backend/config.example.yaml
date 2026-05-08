@@ -2,12 +2,13 @@ listen_addr: "127.0.0.1:8080"
 repo_root: ".."
 work_dir: ".runs"
 project_cache_path: ".runs/projects.json"
-timeout_seconds: 120
+timeout_seconds: 300
 max_concurrent_runs: 1
 forge_bin: "forge"
 anvil_bin: "anvil"
 anvil_host: "127.0.0.1"
 anvil_port_start: 18545
+etherscan_api_key: "${ETHERSCAN_API_KEY}"
 rpc_urls:
   mainnet: "${MAINNET_RPC_URL}"
   base: "${BASE_RPC_URL}"

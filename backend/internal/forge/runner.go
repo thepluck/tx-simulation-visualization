@@ -45,12 +45,15 @@ func (r Runner) Run(ctx context.Context, args ...string) Result {
 		return result
 	}
 
+	if ctx.Err() != nil {
+		result.ExitCode = -1
+		result.Err = ctx.Err()
+		return result
+	}
+
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
 		result.ExitCode = exitErr.ExitCode()
-	} else if ctx.Err() != nil {
-		result.ExitCode = -1
-		result.Err = ctx.Err()
 	} else {
 		result.ExitCode = -1
 	}

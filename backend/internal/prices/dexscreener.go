@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"tx-simulation-visualization/backend/internal/fundflow"
@@ -56,7 +55,6 @@ func (p DexScreenerProvider) Fetch(ctx context.Context, chain string, tokens []s
 			Address string `json:"address"`
 			Symbol  string `json:"symbol"`
 		} `json:"baseToken"`
-		PriceUSD  string `json:"priceUsd"`
 		Liquidity *struct {
 			USD float64 `json:"usd"`
 		} `json:"liquidity"`
@@ -70,44 +68,43 @@ func (p DexScreenerProvider) Fetch(ctx context.Context, chain string, tokens []s
 
 	best := make(map[string]dexScreenerCandidate)
 	for _, pair := range pairs {
-		token := normalizeAddress(pair.BaseToken.Address)
-		if _, ok := wanted[token]; !ok {
-			continue
-		}
-		priceUSD, err := strconv.ParseFloat(strings.TrimSpace(pair.PriceUSD), 64)
-		if err != nil || priceUSD <= 0 {
-			continue
-		}
 		liquidityUSD := 0.0
 		if pair.Liquidity != nil {
 			liquidityUSD = pair.Liquidity.USD
 		}
-		candidate := dexScreenerCandidate{
-			price:     priceUSD,
+		baseCandidate := dexScreenerCandidate{
 			liquidity: liquidityUSD,
 			symbol:    strings.TrimSpace(pair.BaseToken.Symbol),
 		}
 		if pair.Info != nil {
-			candidate.logoURL = strings.TrimSpace(pair.Info.ImageURL)
+			baseCandidate.logoURL = strings.TrimSpace(pair.Info.ImageURL)
 		}
-		if current, ok := best[token]; !ok || candidate.liquidity > current.liquidity {
-			best[token] = candidate
-		}
+		addDexScreenerCandidate(best, wanted, normalizeAddress(pair.BaseToken.Address), baseCandidate)
 	}
 
 	out := make(map[string]fundflow.TokenPrice)
 	for token, candidate := range best {
 		out[token] = fundflow.TokenPrice{
-			PriceUSD: candidate.price,
-			Symbol:   candidate.symbol,
-			LogoURL:  candidate.logoURL,
+			Symbol:  candidate.symbol,
+			LogoURL: candidate.logoURL,
 		}
 	}
 	return out, nil
 }
 
+func addDexScreenerCandidate(best map[string]dexScreenerCandidate, wanted map[string]struct{}, token string, candidate dexScreenerCandidate) {
+	if token == "" {
+		return
+	}
+	if _, ok := wanted[token]; !ok {
+		return
+	}
+	if current, ok := best[token]; !ok || candidate.liquidity > current.liquidity {
+		best[token] = candidate
+	}
+}
+
 type dexScreenerCandidate struct {
-	price     float64
 	liquidity float64
 	symbol    string
 	logoURL   string

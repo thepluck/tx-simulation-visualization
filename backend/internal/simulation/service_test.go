@@ -278,12 +278,13 @@ func TestSimulateExternalProjectBuildsSrcCompilesOverrideAndRunsCopiedScript(t *
 
 	projectRoot := t.TempDir()
 	cfg := config.Config{
-		ListenAddr:     "127.0.0.1:0",
-		RepoRoot:       repoRoot,
-		WorkDir:        filepath.Join(t.TempDir(), "runs"),
-		TimeoutSeconds: 30,
-		MaxConcurrent:  1,
-		ForgeBin:       "forge",
+		ListenAddr:      "127.0.0.1:0",
+		RepoRoot:        repoRoot,
+		WorkDir:         filepath.Join(t.TempDir(), "runs"),
+		TimeoutSeconds:  30,
+		MaxConcurrent:   1,
+		ForgeBin:        "forge",
+		EtherscanAPIKey: "etherscan-test-key",
 		RPCURLs: map[string]string{
 			"mainnet": "http://127.0.0.1:8545",
 		},
@@ -301,10 +302,9 @@ func TestSimulateExternalProjectBuildsSrcCompilesOverrideAndRunsCopiedScript(t *
 	setFakeAnvilWorker(service, "http://127.0.0.1:19001")
 
 	resp, status := service.Simulate(context.Background(), model.SimulateRequest{
-		Chain:           "mainnet",
-		BlockNumber:     "1",
-		ProjectPath:     projectRoot,
-		EtherscanAPIKey: "etherscan-test-key",
+		Chain:       "mainnet",
+		BlockNumber: "1",
+		ProjectPath: projectRoot,
 		StateOverride: &model.StateOverride{
 			ContractName: "OverrideState",
 			Source:       "pragma solidity ^0.8.0; contract OverrideState {}",

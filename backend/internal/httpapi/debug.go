@@ -95,7 +95,7 @@ func redactJSONValue(value any) {
 	switch typed := value.(type) {
 	case map[string]any:
 		for key, child := range typed {
-			if strings.EqualFold(key, "etherscanApiKey") {
+			if strings.EqualFold(key, "etherscanApiKey") || strings.EqualFold(key, "etherscan_api_key") {
 				typed[key] = "<redacted>"
 				continue
 			}

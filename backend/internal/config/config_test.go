@@ -94,6 +94,7 @@ func TestLoadAllowsEnvToOverrideConfigValues(t *testing.T) {
 	t.Setenv("TXSIM_ANVIL_BIN", "anvil-env")
 	t.Setenv("TXSIM_ANVIL_HOST", "127.0.0.2")
 	t.Setenv("TXSIM_ANVIL_PORT_START", "19454")
+	t.Setenv("TXSIM_ETHERSCAN_API_KEY", "etherscan-env")
 	t.Setenv("MAINNET_RPC_URL", "https://rpc.env")
 	t.Setenv("MAINNET_EXPLORER_URL", "https://explorer.env/")
 
@@ -106,6 +107,7 @@ forge_bin: "forge-config"
 anvil_bin: "anvil-config"
 anvil_host: "127.0.0.1"
 anvil_port_start: 18545
+etherscan_api_key: "etherscan-config"
 rpc_urls:
   mainnet: "https://rpc.config"
 explorer_urls:
@@ -143,6 +145,9 @@ explorer_urls:
 	if cfg.AnvilPortStart != 19454 {
 		t.Fatalf("anvil port start = %d, want env override", cfg.AnvilPortStart)
 	}
+	if cfg.EtherscanAPIKey != "etherscan-env" {
+		t.Fatalf("etherscan api key = %q, want env override", cfg.EtherscanAPIKey)
+	}
 	if cfg.RPCURLs["mainnet"] != "https://rpc.env" {
 		t.Fatalf("mainnet rpc = %q, want env override", cfg.RPCURLs["mainnet"])
 	}
@@ -156,18 +161,23 @@ func TestLoadReadsDotEnvWithGotenv(t *testing.T) {
 	configPath := filepath.Join(configDir, "config.yaml")
 
 	t.Setenv("TXSIM_CONFIG", configPath)
+	t.Cleanup(func() {
+		_ = os.Unsetenv("ETHERSCAN_API_KEY")
+	})
 
 	data := []byte(`repo_root: "."
 rpc_urls:
   mainnet: "${MAINNET_RPC_URL}"
 explorer_urls:
   mainnet: "${MAINNET_EXPLORER_URL}"
+etherscan_api_key: "${ETHERSCAN_API_KEY}"
 `)
 	if err := os.WriteFile(configPath, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	dotenv := []byte(`MAINNET_RPC_URL="https://rpc.dotenv"
 MAINNET_EXPLORER_URL=https://explorer.dotenv/
+ETHERSCAN_API_KEY=etherscan-dotenv
 `)
 	if err := os.WriteFile(filepath.Join(configDir, ".env"), dotenv, 0o600); err != nil {
 		t.Fatal(err)
@@ -182,6 +192,9 @@ MAINNET_EXPLORER_URL=https://explorer.dotenv/
 	}
 	if cfg.ExplorerURLs["mainnet"] != "https://explorer.dotenv" {
 		t.Fatalf("mainnet explorer = %q, want dotenv value", cfg.ExplorerURLs["mainnet"])
+	}
+	if cfg.EtherscanAPIKey != "etherscan-dotenv" {
+		t.Fatalf("etherscan api key = %q, want dotenv value", cfg.EtherscanAPIKey)
 	}
 }
 
@@ -209,6 +222,30 @@ rpc_urls:
 	}
 	if cfg.RPCURLs["mainnet"] != "https://rpc.env" {
 		t.Fatalf("mainnet rpc = %q, want existing env override", cfg.RPCURLs["mainnet"])
+	}
+}
+
+func TestLoadReadsPlainEtherscanAPIKeyEnv(t *testing.T) {
+	configDir := t.TempDir()
+	configPath := filepath.Join(configDir, "config.yaml")
+
+	t.Setenv("TXSIM_CONFIG", configPath)
+	t.Setenv("ETHERSCAN_API_KEY", "etherscan-env")
+
+	data := []byte(`repo_root: "."
+rpc_urls:
+  mainnet: "https://rpc.example"
+`)
+	if err := os.WriteFile(configPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, _, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.EtherscanAPIKey != "etherscan-env" {
+		t.Fatalf("etherscan api key = %q, want plain env value", cfg.EtherscanAPIKey)
 	}
 }
 
@@ -241,7 +278,7 @@ func TestLoadUsesViperDefaults(t *testing.T) {
 	if cfg.ProjectCachePath != filepath.Join(configDir, ".runs", "projects.json") {
 		t.Fatalf("project cache path = %q, want default under work dir", cfg.ProjectCachePath)
 	}
-	if cfg.TimeoutSeconds != 120 {
+	if cfg.TimeoutSeconds != 300 {
 		t.Fatalf("timeout seconds = %d, want viper default", cfg.TimeoutSeconds)
 	}
 	if cfg.MaxConcurrent != 1 {
@@ -258,6 +295,9 @@ func TestLoadUsesViperDefaults(t *testing.T) {
 	}
 	if cfg.AnvilPortStart != 18545 {
 		t.Fatalf("anvil port start = %d, want viper default", cfg.AnvilPortStart)
+	}
+	if cfg.EtherscanAPIKey != "" {
+		t.Fatalf("etherscan api key = %q, want empty viper default", cfg.EtherscanAPIKey)
 	}
 }
 

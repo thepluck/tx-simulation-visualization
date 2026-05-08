@@ -18,19 +18,20 @@ import type { SimulateRequest, SimulateResponse } from "./types";
 
 export default function App() {
   const queryClient = useQueryClient();
-  const [form, setForm] = useState<FormState>(() => loadPersistedUIState().form);
+  const initialUIState = useMemo(() => loadPersistedUIState(), []);
+  const [form, setForm] = useState<FormState>(initialUIState.form);
   const [optimisticProjects, setOptimisticProjects] = useState<string[]>([]);
-  const [requestTab, setRequestTab] = useState<RequestTab>(() => loadPersistedUIState().requestTab);
-  const [outputView, setOutputView] = useState<OutputView>("trace");
-  const [response, setResponse] = useState<SimulateResponse | null>(null);
+  const [requestTab, setRequestTab] = useState<RequestTab>(initialUIState.requestTab);
+  const [outputView, setOutputView] = useState<OutputView>(initialUIState.outputView);
+  const [response, setResponse] = useState<SimulateResponse | null>(initialUIState.response);
   const [error, setError] = useState("");
   const [expandMode, setExpandMode] = useState<ExpandMode>("depth");
-  const [traceExpandDepth, setTraceExpandDepth] = useState(() => loadPersistedUIState().traceExpandDepth);
+  const [traceExpandDepth, setTraceExpandDepth] = useState(initialUIState.traceExpandDepth);
   const simulationAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    savePersistedUIState({ form, requestTab, traceExpandDepth });
-  }, [form, requestTab, traceExpandDepth]);
+    savePersistedUIState({ form, outputView, requestTab, response, traceExpandDepth });
+  }, [form, outputView, requestTab, response, traceExpandDepth]);
 
   const healthQuery = useQuery({
     queryKey: ["health", form.apiUrl],
@@ -67,7 +68,7 @@ export default function App() {
     const state = response.success ? "success" : "failed";
     return `${state} | ${response.durationMillis}ms | exit ${response.exitCode} | ${response.id}`;
   }, [response]);
-  const addressLabels = useMemo(() => buildAddressLabels(form.labelOverrides, form.sender), [form.labelOverrides, form.sender]);
+  const addressLabels = useMemo(() => buildAddressLabels(form.labelOverrides, form.sender, response), [form.labelOverrides, form.sender, response]);
   const explorerBaseUrl = useMemo(() => explorerForChain(explorerUrls, form.chain), [explorerUrls, form.chain]);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
@@ -140,7 +141,6 @@ export default function App() {
         outputView={outputView}
         response={response}
         runMeta={runMeta}
-        target={form.target}
         onExpandDepthChange={setTraceExpandDepth}
         onExpandModeChange={setExpandMode}
         onOutputViewChange={setOutputView}

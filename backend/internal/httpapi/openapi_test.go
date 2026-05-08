@@ -57,8 +57,8 @@ func TestOpenAPIEndpoint(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing SimulateRequest properties: %#v", simulateRequest)
 	}
-	if _, ok := properties["etherscanApiKey"]; !ok {
-		t.Fatalf("missing etherscanApiKey request property: %#v", properties)
+	if _, ok := properties["etherscanApiKey"]; ok {
+		t.Fatalf("etherscanApiKey should be backend config, not a request property: %#v", properties)
 	}
 }
 

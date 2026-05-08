@@ -28,7 +28,6 @@ export type FormState = {
   erc721ApprovalOverrides: ERC721ApprovalOverride[];
   stateContractName: string;
   stateSource: string;
-  etherscanApiKey: string;
   compilerUse: string;
   optimizerRuns: string;
   evmVersion: string;
@@ -53,7 +52,6 @@ export const defaults: FormState = {
   erc721ApprovalOverrides: [],
   stateContractName: "",
   stateSource: "",
-  etherscanApiKey: "",
   compilerUse: "",
   optimizerRuns: "",
   evmVersion: "",
@@ -112,7 +110,6 @@ export function buildRequest(form: FormState): SimulateRequest {
   };
 
   optionalString(request, "projectPath", form.projectPath);
-  optionalString(request, "etherscanApiKey", form.etherscanApiKey);
   if (form.stateSource.trim()) {
     const stateOverride: StateOverride = { source: form.stateSource };
     optionalString(stateOverride, "contractName", form.stateContractName);
