@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchChainConfig, fetchHealth, fetchProjects, simulate } from "./api";
 import OutputPanel from "./components/OutputPanel";
@@ -26,6 +26,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [expandMode, setExpandMode] = useState<ExpandMode>("depth");
   const [traceExpandDepth, setTraceExpandDepth] = useState(() => loadPersistedUIState().traceExpandDepth);
+  const simulationAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     savePersistedUIState({ form, requestTab, traceExpandDepth });
@@ -74,7 +75,8 @@ export default function App() {
   };
 
   const simulation = useMutation({
-    mutationFn: ({ apiUrl, request }: { apiUrl: string; request: SimulateRequest }) => simulate(apiUrl, request),
+    mutationFn: ({ apiUrl, request, signal }: { apiUrl: string; request: SimulateRequest; signal: AbortSignal }) =>
+      simulate(apiUrl, request, signal),
     onSuccess: (result, variables) => {
       setResponse(result);
       setOutputView(result.erc20Transfers?.length ? "flow" : result.balanceAnalysis ? "balances" : "trace");
@@ -83,14 +85,32 @@ export default function App() {
       void queryClient.invalidateQueries({ queryKey: ["projects", variables.apiUrl] });
     },
     onError: (err) => {
+      if (isAbortError(err)) {
+        setError("Simulation aborted");
+        return;
+      }
       setError(err instanceof Error ? err.message : String(err));
+    },
+    onSettled: (_result, _err, variables) => {
+      if (simulationAbortRef.current?.signal === variables?.signal) {
+        simulationAbortRef.current = null;
+      }
     }
   });
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (simulation.isPending) {
+      return;
+    }
     setError("");
-    simulation.mutate({ apiUrl: form.apiUrl, request: buildRequest(form) });
+    const controller = new AbortController();
+    simulationAbortRef.current = controller;
+    simulation.mutate({ apiUrl: form.apiUrl, request: buildRequest(form), signal: controller.signal });
+  };
+
+  const abortSimulation = () => {
+    simulationAbortRef.current?.abort();
   };
 
   return (
@@ -103,6 +123,7 @@ export default function App() {
         projectSuggestions={projectSuggestions}
         requestTab={requestTab}
         status={status}
+        onAbort={abortSimulation}
         onProjectBrowsed={(path) => {
           setOptimisticProjects((current) => mergeProjects([path], current).slice(0, 20));
           void queryClient.invalidateQueries({ queryKey: ["projects", form.apiUrl] });
@@ -126,6 +147,10 @@ export default function App() {
       />
     </main>
   );
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "AbortError";
 }
 
 function mergeProjects(primary: string[], secondary: string[]): string[] {

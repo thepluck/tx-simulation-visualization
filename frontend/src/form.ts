@@ -7,6 +7,7 @@ import type {
   SimulateRequest,
   StateOverride
 } from "./types";
+import { simulateRequestSchema } from "./schemas";
 
 export type RequestTab = "overrides" | "state" | "compiler";
 export type OutputView = "trace" | "flow" | "balances" | "json";
@@ -45,7 +46,7 @@ export const defaults: FormState = {
   projectPath: "",
   sender: "",
   target: "",
-  data: "0x",
+  data: "",
   labelOverrides: [],
   erc20BalanceOverrides: [],
   erc20ApprovalOverrides: [],
@@ -118,7 +119,11 @@ export function buildRequest(form: FormState): SimulateRequest {
     request.stateOverride = stateOverride;
   }
 
-  return request;
+  const parsed = simulateRequestSchema.safeParse(request);
+  if (!parsed.success) {
+    throw new Error(`request validation failed: ${formatSchemaError(parsed.error)}`);
+  }
+  return parsed.data;
 }
 
 function withSenderLabel(sender: string, labels: LabelOverride[]): LabelOverride[] {
@@ -160,4 +165,11 @@ function compactRows<T, K extends keyof T>(rows: T[], fields: K[], label: string
     }
     return [normalized];
   });
+}
+
+function formatSchemaError(error: { issues: Array<{ path: PropertyKey[]; message: string }> }): string {
+  return error.issues
+    .slice(0, 3)
+    .map((issue) => `${issue.path.length ? issue.path.map(String).join(".") : "request"}: ${issue.message}`)
+    .join("; ");
 }

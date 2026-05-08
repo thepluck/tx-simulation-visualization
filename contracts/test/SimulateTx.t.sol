@@ -67,6 +67,10 @@ contract SimulateTxTest is Test {
     assertEq(IERC20(WETH).balanceOf(owner), 0);
     assertEq(IERC20(WETH).balanceOf(recipient), recipientBalanceBefore + WETH_AMOUNT);
     assertEq(IERC20(WETH).allowance(owner, spender), 0);
+
+    Vm.Log[] memory entries = vm.getRecordedLogs();
+    assertEq(entries.length, 1);
+    assertEq(entries[0].emitter, 0x000000000000000000636F6e736F6c652e6c6f67);
   }
 
   function testStateOverrideContractDealsWETHBalanceAndApprovalThenTransferFrom() public {
@@ -127,6 +131,9 @@ contract SimulateTxTest is Test {
     );
 
     assertEq(IERC721(BAYC).ownerOf(BAYC_TOKEN_ID), recipient);
+
+    Vm.Log[] memory entries = vm.getRecordedLogs();
+    assertEq(entries.length, 0);
   }
 }
 

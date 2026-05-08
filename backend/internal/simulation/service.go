@@ -3,6 +3,7 @@ package simulation
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -35,11 +36,16 @@ type priceProvider interface {
 	Fetch(ctx context.Context, chain string, tokens []string) (map[string]fundflow.TokenPrice, error)
 }
 
+type anvilWorker interface {
+	Fork(ctx context.Context, rpcURL string, blockNumber model.Uint256) (string, error)
+	Stop()
+}
+
 type Service struct {
-	cfg        config.Config
-	forge      forgeRunner
-	prices     priceProvider
-	runLimiter chan struct{}
+	cfg     config.Config
+	forge   forgeRunner
+	prices  priceProvider
+	workers chan *simulationWorker
 }
 
 type foundryExecution struct {
@@ -51,6 +57,11 @@ type foundryExecution struct {
 	tempFiles    []string
 }
 
+type simulationWorker struct {
+	id    int
+	anvil anvilWorker
+}
+
 func NewService(cfg config.Config) *Service {
 	return &Service{
 		cfg: cfg,
@@ -58,8 +69,57 @@ func NewService(cfg config.Config) *Service {
 			Bin:      cfg.ForgeBin,
 			RepoRoot: cfg.RepoRoot,
 		},
-		prices:     prices.DefaultProvider(cfg.RPCURLs),
-		runLimiter: make(chan struct{}, cfg.MaxConcurrent),
+		prices:  prices.DefaultProvider(cfg.RPCURLs),
+		workers: newSimulationWorkers(cfg),
+	}
+}
+
+func newSimulationWorkers(cfg config.Config) chan *simulationWorker {
+	count := cfg.MaxConcurrent
+	if count <= 0 {
+		count = 1
+	}
+	host := strings.TrimSpace(cfg.AnvilHost)
+	if host == "" {
+		host = defaultAnvilHost
+	}
+	bin := strings.TrimSpace(cfg.AnvilBin)
+	if bin == "" {
+		bin = defaultAnvilBin
+	}
+	portStart := cfg.AnvilPortStart
+	if portStart <= 0 {
+		portStart = defaultAnvilPortStart
+	}
+
+	workers := make(chan *simulationWorker, count)
+	for i := 0; i < count; i++ {
+		workers <- &simulationWorker{
+			id:    i,
+			anvil: newAnvilInstance(bin, host, portStart+i),
+		}
+	}
+	return workers
+}
+
+func (s *Service) Close() {
+	if s == nil || s.workers == nil {
+		return
+	}
+	held := make([]*simulationWorker, 0, cap(s.workers))
+	for {
+		select {
+		case worker := <-s.workers:
+			held = append(held, worker)
+			if worker != nil && worker.anvil != nil {
+				worker.anvil.Stop()
+			}
+		default:
+			for _, worker := range held {
+				s.workers <- worker
+			}
+			return
+		}
 	}
 }
 
@@ -81,71 +141,136 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 	start := time.Now()
 	runID := runid.New()
 	resp := model.SimulateResponse{ID: runID}
+	finish := func(status int) (model.SimulateResponse, int) {
+		attrs := []any{
+			"run_id", runID,
+			"status", status,
+			"success", resp.Success,
+			"exit_code", resp.ExitCode,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"chain", req.Chain,
+		}
+		if resp.Error != "" {
+			attrs = append(attrs, "error", resp.Error)
+		}
+		if status >= http.StatusBadRequest {
+			slog.Warn("simulation finished", attrs...)
+		} else {
+			slog.Info("simulation finished", attrs...)
+		}
+		return resp, status
+	}
 
 	rpcURL, err := s.validateRequest(&req)
 	if err != nil {
 		resp.Error = err.Error()
-		return resp, http.StatusBadRequest
+		return finish(http.StatusBadRequest)
 	}
+	source, contractName := req.StateOverrideSourceAndName()
+	hasStateOverride := strings.TrimSpace(source) != ""
+	slog.Info(
+		"simulation started",
+		"run_id", runID,
+		"chain", req.Chain,
+		"block_number", req.BlockNumber.String(),
+		"sender", req.Sender,
+		"target", req.Target,
+		"data_bytes", normalizedHexBytes(req.Data),
+		"external_project", req.ProjectPath != "",
+		"project_path", req.ProjectPath,
+		"label_overrides", len(req.LabelOverrides),
+		"erc20_balance_overrides", len(req.ERC20BalanceOverrides),
+		"erc20_approval_overrides", len(req.ERC20ApprovalOverrides),
+		"erc721_approval_overrides", len(req.ERC721ApprovalOverrides),
+		"has_state_override", hasStateOverride,
+		"has_etherscan_key", req.EtherscanAPIKey != "",
+	)
 
 	timeout := time.Duration(s.cfg.TimeoutSeconds) * time.Second
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
-	release, err := s.acquireRunSlot(ctx)
+	waitStart := time.Now()
+	worker, release, err := s.acquireWorker(ctx)
 	if err != nil {
 		resp.Error = "rate limit: timed out waiting for an available simulation slot"
-		return resp, http.StatusTooManyRequests
+		return finish(http.StatusTooManyRequests)
 	}
-	defer release()
+	slog.Info("simulation worker acquired", "run_id", runID, "worker_id", worker.id, "wait_ms", time.Since(waitStart).Milliseconds())
+	defer func() {
+		release()
+		slog.Info("simulation worker released", "run_id", runID, "worker_id", worker.id)
+	}()
 
 	runDir := filepath.Join(s.cfg.WorkDir, runID)
 	if err := os.MkdirAll(runDir, 0o755); err != nil {
 		resp.Error = "create run directory: " + err.Error()
-		return resp, http.StatusInternalServerError
+		return finish(http.StatusInternalServerError)
 	}
 	resp.RunDir = runDir
+	slog.Info("simulation run directory ready", "run_id", runID, "run_dir", runDir)
 
 	execution, err := s.prepareFoundryExecution(&req, runID)
 	if err != nil {
 		resp.Error = "prepare foundry project: " + err.Error()
-		return resp, http.StatusInternalServerError
+		return finish(http.StatusInternalServerError)
 	}
 	defer execution.cleanup()
 	resp.ScriptPath = execution.ScriptPath
+	slog.Info(
+		"foundry execution prepared",
+		"run_id", runID,
+		"root", execution.Root,
+		"script_target", execution.ScriptTarget,
+		"script_path", execution.ScriptPath,
+		"external_project", execution.External,
+	)
 
 	if execution.External {
+		slog.Info("forge build src started", "run_id", runID, "root", execution.Root)
 		buildResult := s.buildProjectSrc(ctx, execution, req.Compiler)
+		logForgeResult(runID, "build project src", buildResult)
 		if buildResult.Err != nil {
 			status := populateForgeFailure(&resp, start, buildResult, rpcURL, req.Chain, "build project src", buildResult.Err)
-			return resp, status
+			return finish(status)
 		}
 	}
 
 	stateBytecode := "0x"
-	source, contractName := req.StateOverrideSourceAndName()
 	if strings.TrimSpace(source) != "" {
 		if contractName == "" {
 			contractName = solidity.DetectContractName(source)
 			if contractName == "" {
 				resp.Error = "stateOverride.contractName is required when the source contains no `contract Name` declaration"
-				return resp, http.StatusBadRequest
+				return finish(http.StatusBadRequest)
 			}
 		}
 
 		statePath, err := s.writeStateOverrideSource(runDir, &execution, runID, source)
 		if err != nil {
 			resp.Error = "write state override source: " + err.Error()
-			return resp, http.StatusInternalServerError
+			return finish(http.StatusInternalServerError)
 		}
+		slog.Info("state override source written", "run_id", runID, "contract", contractName, "path", statePath)
 
+		slog.Info("state override compile started", "run_id", runID, "root", execution.Root, "contract", contractName)
 		bytecode, compileResult, err := s.compileStateOverride(ctx, execution.Root, statePath, contractName, req.Compiler)
+		logForgeResult(runID, "compile state override", compileResult)
 		if err != nil {
 			status := populateForgeFailure(&resp, start, compileResult, rpcURL, req.Chain, "compile state override", err)
-			return resp, status
+			return finish(status)
 		}
 		stateBytecode = bytecode
+		slog.Info("state override compile completed", "run_id", runID, "contract", contractName, "bytecode_bytes", normalizedHexBytes(stateBytecode))
 	}
+
+	slog.Info("anvil fork prepare started", "run_id", runID, "worker_id", worker.id, "chain", req.Chain, "block_number", req.BlockNumber.String())
+	anvilRPCURL, err := worker.anvil.Fork(ctx, rpcURL, req.BlockNumber)
+	if err != nil {
+		resp.Error = "prepare anvil fork: " + err.Error()
+		return finish(http.StatusBadGateway)
+	}
+	slog.Info("anvil fork ready", "run_id", runID, "worker_id", worker.id, "anvil_rpc", anvilRPCURL)
 
 	forgeArgs := []string{
 		"script",
@@ -156,8 +281,7 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 	forgeArgs = append(forgeArgs, solidity.ForgeRunArgs(req, stateBytecode)...)
 	forgeArgs = append(forgeArgs,
 		"--root", execution.Root,
-		"--rpc-url", rpcURL,
-		"--fork-block-number", req.BlockNumber.String(),
+		"--rpc-url", anvilRPCURL,
 		"-vvvvv",
 		"--color", "never",
 		"--non-interactive",
@@ -167,24 +291,50 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 		forgeArgs = append(forgeArgs, "--etherscan-api-key", req.EtherscanAPIKey)
 	}
 
+	slog.Info(
+		"forge script started",
+		"run_id", runID,
+		"root", execution.Root,
+		"script_target", execution.ScriptTarget,
+		"anvil_rpc", anvilRPCURL,
+		"compiler_args", len(solidity.ForgeCompilerArgs(req.Compiler)),
+	)
 	result := s.forge.Run(ctx, forgeArgs...)
+	logForgeResult(runID, "forge script", result)
 	resp.DurationMillis = time.Since(start).Milliseconds()
 	resp.Stdout = solidity.RedactRPC(solidity.StripANSI(result.Stdout), rpcURL, req.Chain)
+	resp.Stdout = strings.ReplaceAll(resp.Stdout, anvilRPCURL, "<anvil-rpc-url>")
 	resp.Stderr = solidity.RedactRPC(solidity.StripANSI(result.Stderr), rpcURL, req.Chain)
+	resp.Stderr = strings.ReplaceAll(resp.Stderr, anvilRPCURL, "<anvil-rpc-url>")
 	combined := strings.TrimSpace(resp.Stdout + "\n" + resp.Stderr)
 	resp.Trace = solidity.ExtractTrace(combined)
 	resp.StructuredTrace = traceparser.Parse(resp.Trace)
 	resp.ExitCode = result.ExitCode
 	resp.Success = result.Err == nil
+	slog.Info("forge output parsed", "run_id", runID, "trace_bytes", len(resp.Trace), "trace_nodes", len(resp.StructuredTrace))
 	if result.Err != nil {
-		return resp, http.StatusOK
+		return finish(http.StatusOK)
 	}
-	resp.ERC20Transfers = fundflow.ExtractERC20Transfers(resp.Trace, resp.StructuredTrace, excludedERC721Tokens(req))
-	priceMap := s.fetchTokenPrices(ctx, req.Chain, resp.ERC20Transfers)
+	resp.ERC20Transfers = fundflow.ExtractERC20Transfers(combined)
+	slog.Info("fund flow extracted", "run_id", runID, "erc20_transfers", len(resp.ERC20Transfers))
+	priceMap := s.fetchTokenPrices(ctx, runID, req.Chain, resp.ERC20Transfers)
 	resp.ERC20Transfers = fundflow.EnrichERC20Transfers(resp.ERC20Transfers, priceMap)
 	resp.BalanceAnalysis = fundflow.AnalyzeBalanceChanges(resp.ERC20Transfers, priceMap)
+	balanceChanges := 0
+	userTotals := 0
+	if resp.BalanceAnalysis != nil {
+		balanceChanges = len(resp.BalanceAnalysis.Changes)
+		userTotals = len(resp.BalanceAnalysis.UserTotals)
+	}
+	slog.Info(
+		"balance analysis completed",
+		"run_id", runID,
+		"priced_tokens", len(priceMap),
+		"balance_changes", balanceChanges,
+		"user_totals", userTotals,
+	)
 
-	return resp, http.StatusOK
+	return finish(http.StatusOK)
 }
 
 func (s *Service) validateRequest(req *model.SimulateRequest) (string, error) {
@@ -427,17 +577,50 @@ func (s *Service) compileStateOverride(ctx context.Context, projectRoot string, 
 	return bytecode, result, nil
 }
 
-func (s *Service) fetchTokenPrices(ctx context.Context, chain string, transfers []model.ERC20Transfer) map[string]fundflow.TokenPrice {
+func (s *Service) fetchTokenPrices(ctx context.Context, runID string, chain string, transfers []model.ERC20Transfer) map[string]fundflow.TokenPrice {
 	if len(transfers) == 0 {
 		return nil
 	}
+	tokens := transferTokens(transfers)
+	slog.Info("token price fetch started", "run_id", runID, "chain", chain, "token_count", len(tokens))
 	priceMap := make(map[string]fundflow.TokenPrice)
 	if s.prices != nil {
-		if fetched, err := s.prices.Fetch(ctx, chain, transferTokens(transfers)); err == nil {
+		if fetched, err := s.prices.Fetch(ctx, chain, tokens); err == nil {
 			priceMap = fetched
+		} else {
+			slog.Warn("token price fetch failed", "run_id", runID, "chain", chain, "token_count", len(tokens), "error", err)
 		}
 	}
+	slog.Info("token price fetch completed", "run_id", runID, "chain", chain, "token_count", len(tokens), "priced_tokens", len(priceMap))
 	return priceMap
+}
+
+func logForgeResult(runID string, stage string, result forge.Result) {
+	attrs := []any{
+		"run_id", runID,
+		"stage", stage,
+		"exit_code", result.ExitCode,
+		"duration_ms", result.DurationMillis,
+		"stdout_bytes", len(result.Stdout),
+		"stderr_bytes", len(result.Stderr),
+	}
+	if result.Err != nil {
+		attrs = append(attrs, "error", result.Err)
+		slog.Warn("forge command completed", attrs...)
+		return
+	}
+	slog.Info("forge command completed", attrs...)
+}
+
+func normalizedHexBytes(value string) int {
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(value, "0x") || strings.HasPrefix(value, "0X") {
+		value = value[2:]
+	}
+	if value == "" {
+		return 0
+	}
+	return (len(value) + 1) / 2
 }
 
 func populateForgeFailure(resp *model.SimulateResponse, start time.Time, result forge.Result, rpcURL string, chain string, prefix string, err error) int {
@@ -446,7 +629,7 @@ func populateForgeFailure(resp *model.SimulateResponse, start time.Time, result 
 	resp.Stderr = solidity.RedactRPC(solidity.StripANSI(result.Stderr), rpcURL, chain)
 	resp.Trace = strings.TrimSpace(resp.Stdout + "\n" + resp.Stderr)
 	resp.StructuredTrace = traceparser.Parse(resp.Trace)
-	resp.ERC20Transfers = fundflow.ExtractERC20Transfers(resp.Trace, resp.StructuredTrace, nil)
+	resp.ERC20Transfers = fundflow.ExtractERC20Transfers(resp.Stdout + "\n" + resp.Stderr)
 	resp.ExitCode = result.ExitCode
 	resp.Error = prefix + ": " + err.Error()
 	if result.Err != nil {
@@ -472,21 +655,13 @@ func transferTokens(transfers []model.ERC20Transfer) []string {
 	return tokens
 }
 
-func excludedERC721Tokens(req model.SimulateRequest) []string {
-	tokens := make([]string, 0, len(req.ERC721ApprovalOverrides))
-	for _, override := range req.ERC721ApprovalOverrides {
-		tokens = append(tokens, override.Token)
-	}
-	return tokens
-}
-
-func (s *Service) acquireRunSlot(ctx context.Context) (func(), error) {
+func (s *Service) acquireWorker(ctx context.Context) (*simulationWorker, func(), error) {
 	select {
-	case s.runLimiter <- struct{}{}:
-		return func() {
-			<-s.runLimiter
+	case worker := <-s.workers:
+		return worker, func() {
+			s.workers <- worker
 		}, nil
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, nil, ctx.Err()
 	}
 }

@@ -70,7 +70,7 @@ func TestSimulateWETHBalanceApprovalAndTransferFrom(t *testing.T) {
 		Data:   transferFromCalldata(owner, recipient, mustBigInt(t, amount)),
 	}
 
-	resp, status := newTestService(cfg).Simulate(context.Background(), req)
+	resp, status := newTestService(t, cfg).Simulate(context.Background(), req)
 	t.Cleanup(func() {
 		if resp.RunDir != "" {
 			_ = os.RemoveAll(resp.RunDir)
@@ -113,7 +113,7 @@ func TestSimulateStateOverrideContractDealsWETHBalanceAndApproval(t *testing.T) 
 		Data:   transferFromCalldata(owner, recipient, mustBigInt(t, amount)),
 	}
 
-	resp, status := newTestService(cfg).Simulate(context.Background(), req)
+	resp, status := newTestService(t, cfg).Simulate(context.Background(), req)
 	t.Cleanup(func() {
 		if resp.RunDir != "" {
 			_ = os.RemoveAll(resp.RunDir)
@@ -155,7 +155,7 @@ func TestSimulateNFTApprovalAndTransferFrom(t *testing.T) {
 		Data:   transferFromCalldata(owner, recipient, mustBigInt(t, baycTokenID)),
 	}
 
-	resp, status := newTestService(cfg).Simulate(context.Background(), req)
+	resp, status := newTestService(t, cfg).Simulate(context.Background(), req)
 	t.Cleanup(func() {
 		if resp.RunDir != "" {
 			_ = os.RemoveAll(resp.RunDir)
@@ -211,7 +211,9 @@ func TestSimulateReturnsTraceWhenScriptFailsWithoutFundFlow(t *testing.T) {
 		},
 	}
 	service := NewService(cfg)
+	t.Cleanup(service.Close)
 	service.forge = fake
+	fakeAnvil := setFakeAnvilWorker(service, "http://127.0.0.1:19000")
 
 	resp, status := service.Simulate(context.Background(), model.SimulateRequest{
 		Chain:       "mainnet",
@@ -223,6 +225,15 @@ func TestSimulateReturnsTraceWhenScriptFailsWithoutFundFlow(t *testing.T) {
 
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want 200; resp=%#v", status, resp)
+	}
+	if len(fakeAnvil.calls) != 1 {
+		t.Fatalf("anvil calls = %#v, want one fork", fakeAnvil.calls)
+	}
+	if fakeAnvil.calls[0].rpcURL != "http://127.0.0.1:8545" || fakeAnvil.calls[0].blockNumber != "1" {
+		t.Fatalf("anvil fork call = %#v", fakeAnvil.calls[0])
+	}
+	if len(fake.calls) != 1 || !hasArgSequence(fake.calls[0], "--rpc-url", "http://127.0.0.1:19000") || containsArg(fake.calls[0], "--fork-block-number") {
+		t.Fatalf("forge should run against worker anvil rpc without fork-block-number: %#v", fake.calls)
 	}
 	if resp.Success {
 		t.Fatalf("success = true, want false for failing forge script")
@@ -285,7 +296,9 @@ func TestSimulateExternalProjectBuildsSrcCompilesOverrideAndRunsCopiedScript(t *
 		},
 	}
 	service := NewService(cfg)
+	t.Cleanup(service.Close)
 	service.forge = fake
+	setFakeAnvilWorker(service, "http://127.0.0.1:19001")
 
 	resp, status := service.Simulate(context.Background(), model.SimulateRequest{
 		Chain:           "mainnet",
@@ -330,8 +343,10 @@ func TestSimulateExternalProjectBuildsSrcCompilesOverrideAndRunsCopiedScript(t *
 		!strings.HasPrefix(scriptArgs[1], filepath.ToSlash(filepath.Join(projectRoot, "script", "TxSimulation_"))) ||
 		!strings.HasSuffix(scriptArgs[1], ".s.sol:SimulateTxScript") ||
 		!hasArgSequence(scriptArgs, "--root", projectRoot) ||
+		!hasArgSequence(scriptArgs, "--rpc-url", "http://127.0.0.1:19001") ||
 		!hasArgSequence(scriptArgs, "--etherscan-api-key", "etherscan-test-key") ||
-		!containsArg(scriptArgs, "0x6000") {
+		!containsArg(scriptArgs, "0x6000") ||
+		containsArg(scriptArgs, "--fork-block-number") {
 		t.Fatalf("unexpected script args: %#v", scriptArgs)
 	}
 	if scriptArgs[4] != `[(0x0000000000000000000000000000000000000001,"Sender")]` {
@@ -666,8 +681,11 @@ func (f fakePriceProvider) Fetch(_ context.Context, _ string, _ []string) (map[s
 	return f.prices, nil
 }
 
-func newTestService(cfg config.Config) *Service {
+func newTestService(t *testing.T, cfg config.Config) *Service {
+	t.Helper()
+
 	service := NewService(cfg)
+	t.Cleanup(service.Close)
 	service.prices = fakePriceProvider{
 		prices: map[string]fundflow.TokenPrice{
 			strings.ToLower(wethAddress): {
@@ -678,6 +696,30 @@ func newTestService(cfg config.Config) *Service {
 		},
 	}
 	return service
+}
+
+type fakeAnvilWorker struct {
+	rpcURL string
+	calls  []fakeAnvilCall
+}
+
+type fakeAnvilCall struct {
+	rpcURL      string
+	blockNumber string
+}
+
+func (f *fakeAnvilWorker) Fork(_ context.Context, rpcURL string, blockNumber model.Uint256) (string, error) {
+	f.calls = append(f.calls, fakeAnvilCall{rpcURL: rpcURL, blockNumber: blockNumber.String()})
+	return f.rpcURL, nil
+}
+
+func (f *fakeAnvilWorker) Stop() {}
+
+func setFakeAnvilWorker(service *Service, rpcURL string) *fakeAnvilWorker {
+	fake := &fakeAnvilWorker{rpcURL: rpcURL}
+	service.workers = make(chan *simulationWorker, 1)
+	service.workers <- &simulationWorker{id: 0, anvil: fake}
+	return fake
 }
 
 func hasArgSequence(args []string, want ...string) bool {

@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
+
 	"tx-simulation-visualization/backend/internal/config"
 	"tx-simulation-visualization/backend/internal/model"
 	"tx-simulation-visualization/backend/internal/projectcache"
@@ -37,17 +39,30 @@ func NewServer(cfg config.Config, configPath string) *Server {
 	}
 }
 
+func (s *Server) Close() {
+	if s != nil && s.simulator != nil {
+		s.simulator.Close()
+	}
+}
+
 func (s *Server) Routes() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /docs", s.handleSwaggerUI)
-	mux.HandleFunc("GET /docs/", s.handleSwaggerUI)
-	mux.HandleFunc("GET /openapi.json", s.handleOpenAPI)
-	mux.HandleFunc("GET /health", s.handleHealth)
-	mux.HandleFunc("GET /chains", s.handleChains)
-	mux.HandleFunc("GET /projects", s.handleProjects)
-	mux.HandleFunc("GET /browse/project", s.handleBrowseProject)
-	mux.HandleFunc("POST /simulate", s.handleSimulate)
-	return debugHTTP(localCORS(mux))
+	router := chi.NewRouter()
+	router.Use(debugHTTP)
+	router.Use(localCORS)
+
+	router.Get("/docs", s.handleSwaggerUI)
+	router.Get("/docs/*", s.handleSwaggerUI)
+	router.Get("/openapi.json", s.handleOpenAPI)
+	router.Get("/health", s.handleHealth)
+	router.Get("/chains", s.handleChains)
+	router.Get("/projects", s.handleProjects)
+	router.Get("/browse/project", s.handleBrowseProject)
+	router.Post("/simulate", s.handleSimulate)
+	router.Options("/*", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	return router
 }
 
 func localCORS(next http.Handler) http.Handler {

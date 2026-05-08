@@ -16,6 +16,8 @@ cd backend
 TXSIM_DEBUG_HTTP=1 go run ./cmd/server
 ```
 
+The backend also logs simulation stages with `slog`: worker acquisition, Foundry project setup, external `forge build src`, state override compilation, Anvil start/reset, Forge script exit code, parsed trace size, transfer count, price-fetch count, and balance-analysis count. These logs avoid printing upstream RPC URLs, Etherscan API keys, calldata, or state override bytecode.
+
 Docker is available as an optional deployment path from the repo root:
 
 ```sh
@@ -42,7 +44,7 @@ Use `config.example.yaml` as the starting point. The backend loads `.env` from t
 
 `project_cache_path` stores recently used Foundry project paths. Local runs default to `backend/.runs/projects.json`; Docker uses `/data/runs/projects.json`, which is persisted by the `backend-runs` volume.
 
-`max_concurrent_runs` is a channel-backed limiter for Forge executions. Keep it at `1` for the safest local behavior, or raise it if your machine/RPC can handle parallel simulations.
+`max_concurrent_runs` controls the simulation worker pool size. Each worker lazily starts one quiet Anvil fork on a distinct port, reuses it across requests, and resets it with `anvil_reset` before later runs. `anvil_bin`, `anvil_host`, and `anvil_port_start` configure the local fork processes. Keep concurrency at `1` for the safest local behavior, or raise it if your machine/RPC can handle parallel simulations.
 
 ## Endpoints
 
@@ -118,7 +120,7 @@ Inside Docker, native project browsing is unavailable because the backend runs i
 
 `stateOverride` is optional. When provided, the backend writes the source into the per-request work directory for local runs, or into a temporary file under `<projectPath>/script/` for external-project runs. It then runs `forge inspect <file>:<contractName> bytecode`, passes that creation bytecode as a `run(...)` argument, and executes the simulation script with `forge script`.
 
-`chain` becomes `--rpc-url <configured-url>` and `blockNumber` becomes `--fork-block-number <block>`. They are not part of the Solidity script signature.
+`chain` selects the upstream fork RPC from config, and `blockNumber` selects the fork block. The backend prepares a worker-owned Anvil instance with those fork settings, then runs Forge against the local Anvil RPC. They are not part of the Solidity script signature.
 
 `projectPath` is optional. When provided, the backend treats it as another Foundry project, runs `forge build src --root <projectPath>`, copies `contracts/src/SimulateTx.s.sol` into a temporary file under `<projectPath>/script/`, runs `forge script` against that copied script with `--root <projectPath>`, then removes the temporary script file. Relative paths are resolved against the backend repo root. Paths beginning with `~` are expanded to the backend process user's home directory before validation.
 

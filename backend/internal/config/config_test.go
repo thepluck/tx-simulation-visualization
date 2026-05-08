@@ -91,6 +91,9 @@ func TestLoadAllowsEnvToOverrideConfigValues(t *testing.T) {
 	t.Setenv("TXSIM_TIMEOUT_SECONDS", "9")
 	t.Setenv("TXSIM_MAX_CONCURRENT_RUNS", "3")
 	t.Setenv("TXSIM_FORGE_BIN", "forge-env")
+	t.Setenv("TXSIM_ANVIL_BIN", "anvil-env")
+	t.Setenv("TXSIM_ANVIL_HOST", "127.0.0.2")
+	t.Setenv("TXSIM_ANVIL_PORT_START", "19454")
 	t.Setenv("MAINNET_RPC_URL", "https://rpc.env")
 	t.Setenv("MAINNET_EXPLORER_URL", "https://explorer.env/")
 
@@ -100,6 +103,9 @@ work_dir: "config-runs"
 timeout_seconds: 1
 max_concurrent_runs: 1
 forge_bin: "forge-config"
+anvil_bin: "anvil-config"
+anvil_host: "127.0.0.1"
+anvil_port_start: 18545
 rpc_urls:
   mainnet: "https://rpc.config"
 explorer_urls:
@@ -127,6 +133,15 @@ explorer_urls:
 	}
 	if cfg.ForgeBin != "forge-env" {
 		t.Fatalf("forge bin = %q, want env override", cfg.ForgeBin)
+	}
+	if cfg.AnvilBin != "anvil-env" {
+		t.Fatalf("anvil bin = %q, want env override", cfg.AnvilBin)
+	}
+	if cfg.AnvilHost != "127.0.0.2" {
+		t.Fatalf("anvil host = %q, want env override", cfg.AnvilHost)
+	}
+	if cfg.AnvilPortStart != 19454 {
+		t.Fatalf("anvil port start = %d, want env override", cfg.AnvilPortStart)
 	}
 	if cfg.RPCURLs["mainnet"] != "https://rpc.env" {
 		t.Fatalf("mainnet rpc = %q, want env override", cfg.RPCURLs["mainnet"])
@@ -234,6 +249,15 @@ func TestLoadUsesViperDefaults(t *testing.T) {
 	}
 	if cfg.ForgeBin != "forge" {
 		t.Fatalf("forge bin = %q, want viper default", cfg.ForgeBin)
+	}
+	if cfg.AnvilBin != "anvil" {
+		t.Fatalf("anvil bin = %q, want viper default", cfg.AnvilBin)
+	}
+	if cfg.AnvilHost != "127.0.0.1" {
+		t.Fatalf("anvil host = %q, want viper default", cfg.AnvilHost)
+	}
+	if cfg.AnvilPortStart != 18545 {
+		t.Fatalf("anvil port start = %d, want viper default", cfg.AnvilPortStart)
 	}
 }
 

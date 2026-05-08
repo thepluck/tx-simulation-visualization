@@ -11,6 +11,7 @@ type RequestFormProps = {
   projectSuggestions: string[];
   requestTab: RequestTab;
   status: HealthStatus;
+  onAbort: () => void;
   onProjectBrowsed: (path: string) => void;
   onRequestTabChange: (value: RequestTab) => void;
   onSubmit: FormEventHandler<HTMLFormElement>;
@@ -26,6 +27,7 @@ export default function RequestForm(props: RequestFormProps) {
     projectSuggestions,
     requestTab,
     status,
+    onAbort,
     onProjectBrowsed,
     onRequestTabChange,
     onSubmit,
@@ -117,7 +119,13 @@ export default function RequestForm(props: RequestFormProps) {
 
         <label>
           Calldata
-          <textarea value={form.data} rows={3} spellCheck={false} onChange={(event) => onUpdate("data", event.target.value)} />
+          <textarea
+            value={form.data}
+            rows={3}
+            spellCheck={false}
+            placeholder="0x"
+            onChange={(event) => onUpdate("data", event.target.value)}
+          />
         </label>
 
         <div className="tabs" role="tablist" aria-label="Request sections">
@@ -131,8 +139,12 @@ export default function RequestForm(props: RequestFormProps) {
         {requestTab === "compiler" && <CompilerTab form={form} onUpdate={onUpdate} />}
 
         {error && <div className="error-box">{error}</div>}
-        <button className="primary-action" type="submit" disabled={isRunning}>
-          {isRunning ? "Running..." : "Run Simulation"}
+        <button
+          className={`primary-action ${isRunning ? "abort-action" : ""}`}
+          type={isRunning ? "button" : "submit"}
+          onClick={isRunning ? onAbort : undefined}
+        >
+          {isRunning ? "Abort" : "Run Simulation"}
         </button>
       </form>
     </section>

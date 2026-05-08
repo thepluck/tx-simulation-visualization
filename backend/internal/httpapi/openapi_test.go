@@ -78,6 +78,21 @@ func TestSwaggerUIEndpoint(t *testing.T) {
 	}
 }
 
+func TestCORSOptionsEndpoint(t *testing.T) {
+	server := NewServer(testConfig(t), "")
+	req := httptest.NewRequest(http.MethodOptions, "/simulate", nil)
+	rec := httptest.NewRecorder()
+
+	server.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNoContent)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want *", got)
+	}
+}
+
 func TestChainsEndpointIncludesExplorerURLs(t *testing.T) {
 	server := NewServer(testConfig(t), "")
 	req := httptest.NewRequest(http.MethodGet, "/chains", nil)

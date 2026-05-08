@@ -29,13 +29,25 @@ func (p CoinGeckoProvider) Fetch(ctx context.Context, chain string, tokens []str
 		return nil, nil
 	}
 
+	out := make(map[string]fundflow.TokenPrice)
+	for _, token := range tokens {
+		price, err := p.fetchOne(ctx, platform, token)
+		if err != nil || price.PriceUSD <= 0 {
+			continue
+		}
+		out[token] = price
+	}
+	return out, nil
+}
+
+func (p CoinGeckoProvider) fetchOne(ctx context.Context, platform string, token string) (fundflow.TokenPrice, error) {
 	endpoint := trimBaseURL(p.BaseURL, coinGeckoBaseURL) + "/" + url.PathEscape(platform)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, err
+		return fundflow.TokenPrice{}, err
 	}
 	query := req.URL.Query()
-	query.Set("contract_addresses", strings.Join(tokens, ","))
+	query.Set("contract_addresses", token)
 	query.Set("vs_currencies", "usd")
 	req.URL.RawQuery = query.Encode()
 	if strings.TrimSpace(p.APIKey) != "" {
@@ -44,30 +56,29 @@ func (p CoinGeckoProvider) Fetch(ctx context.Context, chain string, tokens []str
 
 	resp, err := defaultHTTPClient(p.Client).Do(req)
 	if err != nil {
-		return nil, err
+		return fundflow.TokenPrice{}, err
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("coingecko price request failed: %s", resp.Status)
+		return fundflow.TokenPrice{}, fmt.Errorf("coingecko price request failed: %s", resp.Status)
 	}
 
 	var payload map[string]struct {
 		USD float64 `json:"usd"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return nil, err
+		return fundflow.TokenPrice{}, err
 	}
 
-	out := make(map[string]fundflow.TokenPrice)
-	for token, price := range payload {
+	for _, price := range payload {
 		if price.USD <= 0 {
 			continue
 		}
-		out[normalizeAddress(token)] = fundflow.TokenPrice{PriceUSD: price.USD}
+		return fundflow.TokenPrice{PriceUSD: price.USD}, nil
 	}
-	return out, nil
+	return fundflow.TokenPrice{}, nil
 }
 
 func coinGeckoPlatform(chain string) string {

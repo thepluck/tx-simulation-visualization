@@ -10,29 +10,43 @@ const recipient = "0x0000000000000000000000000000000000000003";
 const longBytes = `0x${"a".repeat(64)}`;
 const shortBytes = "0xaaaaaaaa...aaaaaaaa";
 
+test("changes the running action to abort and cancels the active request", async ({ page }) => {
+  await routeBaseEndpoints(page);
+  await page.route(`${apiURL}/simulate`, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    try {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "abort-test",
+          success: true,
+          exitCode: 0,
+          durationMillis: 1,
+          trace: "mock trace",
+          structuredTrace: []
+        })
+      });
+    } catch {
+      // The request is expected to be aborted before the mock response completes.
+    }
+  });
+
+  await page.goto("/");
+  await page.getByLabel("Block").fill("23000000");
+  await page.getByLabel("Sender").fill(spender);
+  await page.getByLabel("Target").fill(token);
+  await page.getByLabel("Calldata").fill("0x23b872dd");
+
+  await page.getByRole("button", { name: "Run Simulation" }).click();
+  await expect(page.getByRole("button", { name: "Abort" })).toBeVisible();
+  await page.getByRole("button", { name: "Abort" }).click();
+  await expect(page.getByText("Simulation aborted")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Run Simulation" })).toBeVisible();
+});
+
 test("uses configured explorer links and renders only the last main call subtree", async ({ page }) => {
-  await page.route(`${apiURL}/health`, async (route) => {
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
-  });
-  await page.route(`${apiURL}/chains`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        chains: ["mainnet"],
-        explorerUrls: {
-          mainnet: explorerURL
-        }
-      })
-    });
-  });
-  await page.route(`${apiURL}/projects`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ projects: ["~/Kyber/ks-dex-aggregator-sc"] })
-    });
-  });
+  await routeBaseEndpoints(page);
   await page.route(`${apiURL}/simulate`, async (route) => {
     const request = route.request().postDataJSON() as { etherscanApiKey?: string; labelOverrides?: Array<{ account: string; label: string }> };
     expect(request.labelOverrides).toContainEqual({ account: spender, label: "Sender" });
@@ -130,6 +144,31 @@ test("uses configured explorer links and renders only the last main call subtree
   await expect(page.locator(`.balance-analysis-table a[href="${explorerURL}/address/${recipient}"]`)).toHaveText("WETHRecipient");
   await expectAddressTooltipStaysOpen(page, "WETHRecipient");
 });
+
+async function routeBaseEndpoints(page: Page) {
+  await page.route(`${apiURL}/health`, async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
+  await page.route(`${apiURL}/chains`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        chains: ["mainnet"],
+        explorerUrls: {
+          mainnet: explorerURL
+        }
+      })
+    });
+  });
+  await page.route(`${apiURL}/projects`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ projects: ["~/Kyber/ks-dex-aggregator-sc"] })
+    });
+  });
+}
 
 async function clickOutputTab(page: Page, name: string) {
   await page.getByRole("button", { name }).evaluate((element) => {

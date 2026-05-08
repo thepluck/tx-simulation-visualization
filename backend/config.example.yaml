@@ -5,6 +5,9 @@ project_cache_path: ".runs/projects.json"
 timeout_seconds: 120
 max_concurrent_runs: 1
 forge_bin: "forge"
+anvil_bin: "anvil"
+anvil_host: "127.0.0.1"
+anvil_port_start: 18545
 rpc_urls:
   mainnet: "${MAINNET_RPC_URL}"
   base: "${BASE_RPC_URL}"

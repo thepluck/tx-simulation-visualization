@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/getkin/kin-openapi v0.137.0
+	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-playground/validator/v10 v10.30.2
 	github.com/spf13/viper v1.21.0
 	github.com/subosito/gotenv v1.6.0

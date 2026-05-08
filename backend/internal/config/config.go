@@ -19,6 +19,9 @@ type Config struct {
 	TimeoutSeconds   int               `mapstructure:"timeout_seconds" yaml:"timeout_seconds"`
 	MaxConcurrent    int               `mapstructure:"max_concurrent_runs" yaml:"max_concurrent_runs"`
 	ForgeBin         string            `mapstructure:"forge_bin" yaml:"forge_bin"`
+	AnvilBin         string            `mapstructure:"anvil_bin" yaml:"anvil_bin"`
+	AnvilHost        string            `mapstructure:"anvil_host" yaml:"anvil_host"`
+	AnvilPortStart   int               `mapstructure:"anvil_port_start" yaml:"anvil_port_start"`
 	RPCURLs          map[string]string `mapstructure:"rpc_urls" yaml:"rpc_urls"`
 	ExplorerURLs     map[string]string `mapstructure:"explorer_urls" yaml:"explorer_urls"`
 }
@@ -90,6 +93,12 @@ func Load() (Config, string, error) {
 	if cfg.MaxConcurrent < 0 {
 		return Config{}, "", errors.New("max_concurrent_runs must be positive")
 	}
+	cfg.ForgeBin = strings.TrimSpace(cfg.ForgeBin)
+	cfg.AnvilBin = strings.TrimSpace(cfg.AnvilBin)
+	cfg.AnvilHost = strings.TrimSpace(cfg.AnvilHost)
+	if cfg.AnvilPortStart < 0 {
+		return Config{}, "", errors.New("anvil_port_start must be positive")
+	}
 	if len(cfg.RPCURLs) == 0 {
 		return Config{}, "", errors.New("rpc_urls must contain at least one chain")
 	}
@@ -128,6 +137,9 @@ func newConfigViper(path string) *viper.Viper {
 	v.SetDefault("timeout_seconds", 120)
 	v.SetDefault("max_concurrent_runs", 1)
 	v.SetDefault("forge_bin", "forge")
+	v.SetDefault("anvil_bin", "anvil")
+	v.SetDefault("anvil_host", "127.0.0.1")
+	v.SetDefault("anvil_port_start", 18545)
 	v.SetEnvPrefix("TXSIM")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	v.AutomaticEnv()
@@ -140,6 +152,9 @@ func newConfigViper(path string) *viper.Viper {
 		"timeout_seconds",
 		"max_concurrent_runs",
 		"forge_bin",
+		"anvil_bin",
+		"anvil_host",
+		"anvil_port_start",
 	} {
 		_ = v.BindEnv(key)
 	}

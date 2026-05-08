@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
+import "forge-std/console2.sol";
 import "forge-std/interfaces/IERC20.sol";
 import "forge-std/interfaces/IERC721.sol";
 
@@ -95,8 +96,10 @@ contract SimulateTxScript is Test {
     }
 
     // execute transaction
+    vm.recordLogs();
     vm.prank(sender);
     _callAndBubble(target, data);
+    _emitRecordedTransferLogs();
   }
 
   function _callAndBubble(address target, bytes memory data) internal {
@@ -108,6 +111,26 @@ contract SimulateTxScript is Test {
         }
       }
       revert("SimulateTxScript: call failed");
+    }
+  }
+
+  function _emitRecordedTransferLogs() internal {
+    Vm.Log[] memory entries = vm.getRecordedLogs();
+    for (uint256 i = 0; i < entries.length; i++) {
+      if (
+        entries[i].topics.length != 3 || entries[i].topics[0] != IERC20.Transfer.selector
+          || entries[i].data.length != 32
+      ) {
+        continue;
+      }
+
+      string memory line =
+        string.concat("TXSIM_LOG|", vm.toString(entries[i].emitter), "|", vm.toString(entries[i].topics.length));
+      for (uint256 j = 0; j < entries[i].topics.length; j++) {
+        line = string.concat(line, "|", vm.toString(entries[i].topics[j]));
+      }
+      line = string.concat(line, "|", vm.toString(entries[i].data));
+      console2.log(line);
     }
   }
 }
