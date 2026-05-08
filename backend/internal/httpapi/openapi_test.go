@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -21,7 +22,7 @@ func TestOpenAPIEndpoint(t *testing.T) {
 	server.Routes().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 	var spec map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &spec); err != nil {
@@ -33,6 +34,9 @@ func TestOpenAPIEndpoint(t *testing.T) {
 	}
 	if _, ok := paths["/simulate"]; !ok {
 		t.Fatalf("missing /simulate path: %#v", paths)
+	}
+	if _, ok := paths["/projects"]; !ok {
+		t.Fatalf("missing /projects path: %#v", paths)
 	}
 	components, ok := spec["components"].(map[string]any)
 	if !ok {
@@ -121,15 +125,38 @@ func TestBrowseProjectEndpoint(t *testing.T) {
 	if payload.Path != "/tmp/foundry-project" {
 		t.Fatalf("path = %q", payload.Path)
 	}
+
+	projects := readProjects(t, server)
+	if len(projects) != 1 || projects[0] != "/tmp/foundry-project" {
+		t.Fatalf("cached projects = %#v", projects)
+	}
+}
+
+func TestProjectsEndpoint(t *testing.T) {
+	server := NewServer(testConfig(t), "")
+	server.rememberProjectPath("~/alpha")
+	server.rememberProjectPath("~/beta")
+	server.rememberProjectPath("~/alpha")
+
+	projects := readProjects(t, server)
+	want := []string{"~/alpha", "~/beta"}
+	if len(projects) != len(want) {
+		t.Fatalf("projects = %#v, want %#v", projects, want)
+	}
+	for i := range want {
+		if projects[i] != want[i] {
+			t.Fatalf("projects = %#v, want %#v", projects, want)
+		}
+	}
 }
 
 func TestDebugHTTPLogsRequestAndResponse(t *testing.T) {
 	t.Setenv("TXSIM_DEBUG_HTTP", "1")
 	var logs bytes.Buffer
-	oldOutput := log.Writer()
-	log.SetOutput(&logs)
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
 	t.Cleanup(func() {
-		log.SetOutput(oldOutput)
+		slog.SetDefault(oldLogger)
 	})
 
 	server := NewServer(testConfig(t), "")
@@ -140,9 +167,13 @@ func TestDebugHTTPLogsRequestAndResponse(t *testing.T) {
 
 	output := logs.String()
 	for _, want := range []string{
-		`http request method=POST path=/simulate body=`,
-		`"etherscanApiKey":"<redacted>"`,
-		`http response method=POST path=/simulate status=400`,
+		`msg="http request"`,
+		`method=POST`,
+		`path=/simulate`,
+		`etherscanApiKey`,
+		`<redacted>`,
+		`msg="http response"`,
+		`status=400`,
 		`invalid JSON body`,
 	} {
 		if !strings.Contains(output, want) {
@@ -158,12 +189,13 @@ func testConfig(t *testing.T) config.Config {
 	t.Helper()
 
 	return config.Config{
-		ListenAddr:     "127.0.0.1:0",
-		RepoRoot:       t.TempDir(),
-		WorkDir:        t.TempDir(),
-		TimeoutSeconds: 1,
-		MaxConcurrent:  1,
-		ForgeBin:       "forge",
+		ListenAddr:       "127.0.0.1:0",
+		RepoRoot:         t.TempDir(),
+		WorkDir:          t.TempDir(),
+		ProjectCachePath: filepath.Join(t.TempDir(), "projects.json"),
+		TimeoutSeconds:   1,
+		MaxConcurrent:    1,
+		ForgeBin:         "forge",
 		RPCURLs: map[string]string{
 			"mainnet": "http://127.0.0.1:8545",
 		},
@@ -171,4 +203,24 @@ func testConfig(t *testing.T) config.Config {
 			"mainnet": "https://etherscan.io",
 		},
 	}
+}
+
+func readProjects(t *testing.T, server *Server) []string {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodGet, "/projects", nil)
+	rec := httptest.NewRecorder()
+
+	server.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var payload struct {
+		Projects []string `json:"projects"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	return payload.Projects
 }

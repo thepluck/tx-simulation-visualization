@@ -8,64 +8,83 @@ import (
 )
 
 type SimulateRequest struct {
-	Chain                   string                   `json:"chain"`
-	BlockNumber             Uint256                  `json:"blockNumber"`
-	ProjectPath             string                   `json:"projectPath"`
-	LabelOverrides          []LabelOverride          `json:"labelOverrides"`
-	ERC20BalanceOverrides   []ERC20BalanceOverride   `json:"erc20BalanceOverrides"`
-	ERC20ApprovalOverrides  []ERC20ApprovalOverride  `json:"erc20ApprovalOverrides"`
-	ERC721ApprovalOverrides []ERC721ApprovalOverride `json:"erc721ApprovalOverrides"`
-	StateOverride           *StateOverride           `json:"stateOverride"`
-	StateOverrideCode       string                   `json:"stateOverrideCode"`
-	StateOverrideContract   string                   `json:"stateOverrideContractName"`
-	Compiler                *CompilerConfig          `json:"compiler"`
-	EtherscanAPIKey         string                   `json:"etherscanApiKey"`
-	Sender                  string                   `json:"sender"`
-	Target                  string                   `json:"target"`
-	Data                    string                   `json:"data"`
+	Chain                   string                   `json:"chain" validate:"required"`
+	BlockNumber             Uint256                  `json:"blockNumber" validate:"required"`
+	ProjectPath             string                   `json:"projectPath,omitempty"`
+	LabelOverrides          []LabelOverride          `json:"labelOverrides,omitempty" validate:"dive"`
+	ERC20BalanceOverrides   []ERC20BalanceOverride   `json:"erc20BalanceOverrides,omitempty" validate:"dive"`
+	ERC20ApprovalOverrides  []ERC20ApprovalOverride  `json:"erc20ApprovalOverrides,omitempty" validate:"dive"`
+	ERC721ApprovalOverrides []ERC721ApprovalOverride `json:"erc721ApprovalOverrides,omitempty" validate:"dive"`
+	StateOverride           *StateOverride           `json:"stateOverride,omitempty"`
+	StateOverrideCode       string                   `json:"stateOverrideCode,omitempty"`
+	StateOverrideContract   string                   `json:"stateOverrideContractName,omitempty"`
+	Compiler                *CompilerConfig          `json:"compiler,omitempty"`
+	EtherscanAPIKey         string                   `json:"etherscanApiKey,omitempty"`
+	Sender                  string                   `json:"sender" validate:"required,eth_address"`
+	Target                  string                   `json:"target" validate:"required,eth_address"`
+	Data                    string                   `json:"data" validate:"hex_bytes"`
 }
 
 type LabelOverride struct {
-	Account string `json:"account"`
-	Label   string `json:"label"`
+	Account string `json:"account" validate:"required,eth_address"`
+	Label   string `json:"label" validate:"required,notblank"`
 }
 
 type ERC20BalanceOverride struct {
-	Token   string  `json:"token"`
-	Account string  `json:"account"`
-	Balance Uint256 `json:"balance"`
+	Token   string  `json:"token" validate:"required,eth_address"`
+	Account string  `json:"account" validate:"required,eth_address"`
+	Balance Uint256 `json:"balance" validate:"required"`
 }
 
 type ERC20ApprovalOverride struct {
-	Token   string  `json:"token"`
-	Owner   string  `json:"owner"`
-	Spender string  `json:"spender"`
-	Amount  Uint256 `json:"amount"`
+	Token   string  `json:"token" validate:"required,eth_address"`
+	Owner   string  `json:"owner" validate:"required,eth_address"`
+	Spender string  `json:"spender" validate:"required,eth_address"`
+	Amount  Uint256 `json:"amount" validate:"required"`
 }
 
 type ERC721ApprovalOverride struct {
-	Token   string  `json:"token"`
-	Owner   string  `json:"owner"`
-	Spender string  `json:"spender"`
-	TokenID Uint256 `json:"tokenId"`
+	Token   string  `json:"token" validate:"required,eth_address"`
+	Owner   string  `json:"owner" validate:"required,eth_address"`
+	Spender string  `json:"spender" validate:"required,eth_address"`
+	TokenID Uint256 `json:"tokenId" validate:"required"`
 }
 
 type StateOverride struct {
 	Source       string `json:"source"`
-	ContractName string `json:"contractName"`
+	ContractName string `json:"contractName,omitempty"`
 }
 
 type CompilerConfig struct {
-	Use               string  `json:"use"`
-	Offline           bool    `json:"offline"`
-	NoAutoDetect      bool    `json:"noAutoDetect"`
-	ViaIR             *bool   `json:"viaIR"`
-	UseLiteralContent bool    `json:"useLiteralContent"`
-	NoMetadata        bool    `json:"noMetadata"`
-	EVMVersion        string  `json:"evmVersion"`
-	Optimize          *bool   `json:"optimize"`
-	OptimizerRuns     *uint32 `json:"optimizerRuns"`
-	RevertStrings     string  `json:"revertStrings"`
+	Use               string  `json:"use,omitempty"`
+	Offline           bool    `json:"offline,omitempty"`
+	NoAutoDetect      bool    `json:"noAutoDetect,omitempty"`
+	ViaIR             *bool   `json:"viaIR,omitempty"`
+	UseLiteralContent bool    `json:"useLiteralContent,omitempty"`
+	NoMetadata        bool    `json:"noMetadata,omitempty"`
+	EVMVersion        string  `json:"evmVersion,omitempty"`
+	Optimize          *bool   `json:"optimize,omitempty"`
+	OptimizerRuns     *uint32 `json:"optimizerRuns,omitempty"`
+	RevertStrings     string  `json:"revertStrings,omitempty"`
+}
+
+type HealthResponse struct {
+	OK                bool `json:"ok"`
+	Chains            int  `json:"chains"`
+	MaxConcurrentRuns int  `json:"maxConcurrentRuns"`
+}
+
+type ChainsResponse struct {
+	Chains       []string          `json:"chains"`
+	ExplorerURLs map[string]string `json:"explorerUrls,omitempty"`
+}
+
+type ProjectsResponse struct {
+	Projects []string `json:"projects"`
+}
+
+type BrowseProjectResponse struct {
+	Path string `json:"path"`
 }
 
 type SimulateResponse struct {

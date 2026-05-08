@@ -3,12 +3,15 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
+	"path/filepath"
 	"sort"
+	"strings"
 
 	"tx-simulation-visualization/backend/internal/config"
 	"tx-simulation-visualization/backend/internal/model"
+	"tx-simulation-visualization/backend/internal/projectcache"
 	"tx-simulation-visualization/backend/internal/simulation"
 )
 
@@ -16,14 +19,20 @@ type Server struct {
 	cfg              config.Config
 	configPath       string
 	chooseProjectDir func(context.Context) (string, error)
+	projectCache     *projectcache.Cache
 	simulator        *simulation.Service
 }
 
 func NewServer(cfg config.Config, configPath string) *Server {
+	projectCachePath := cfg.ProjectCachePath
+	if projectCachePath == "" && cfg.WorkDir != "" {
+		projectCachePath = filepath.Join(cfg.WorkDir, "projects.json")
+	}
 	return &Server{
 		cfg:              cfg,
 		configPath:       configPath,
 		chooseProjectDir: chooseProjectDirectory,
+		projectCache:     projectcache.New(projectCachePath, projectcache.DefaultLimit),
 		simulator:        simulation.NewService(cfg),
 	}
 }
@@ -35,6 +44,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /openapi.json", s.handleOpenAPI)
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /chains", s.handleChains)
+	mux.HandleFunc("GET /projects", s.handleProjects)
 	mux.HandleFunc("GET /browse/project", s.handleBrowseProject)
 	mux.HandleFunc("POST /simulate", s.handleSimulate)
 	return debugHTTP(localCORS(mux))
@@ -54,10 +64,10 @@ func localCORS(next http.Handler) http.Handler {
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"ok":                true,
-		"chains":            len(s.cfg.RPCURLs),
-		"maxConcurrentRuns": s.cfg.MaxConcurrent,
+	writeJSON(w, http.StatusOK, model.HealthResponse{
+		OK:                true,
+		Chains:            len(s.cfg.RPCURLs),
+		MaxConcurrentRuns: s.cfg.MaxConcurrent,
 	})
 }
 
@@ -67,10 +77,19 @@ func (s *Server) handleChains(w http.ResponseWriter, _ *http.Request) {
 		chains = append(chains, chain)
 	}
 	sort.Strings(chains)
-	writeJSON(w, http.StatusOK, map[string]any{
-		"chains":       chains,
-		"explorerUrls": s.cfg.ExplorerURLs,
+	writeJSON(w, http.StatusOK, model.ChainsResponse{
+		Chains:       chains,
+		ExplorerURLs: s.cfg.ExplorerURLs,
 	})
+}
+
+func (s *Server) handleProjects(w http.ResponseWriter, _ *http.Request) {
+	projects, err := s.projectCache.List()
+	if err != nil {
+		slog.Warn("list cached projects", "error", err)
+		projects = []string{}
+	}
+	writeJSON(w, http.StatusOK, model.ProjectsResponse{Projects: projects})
 }
 
 func (s *Server) handleBrowseProject(w http.ResponseWriter, r *http.Request) {
@@ -79,13 +98,14 @@ func (s *Server) handleBrowseProject(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, model.ErrorResponse{Error: "choose project folder: " + err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"path": path})
+	s.rememberProjectPath(path)
+	writeJSON(w, http.StatusOK, model.BrowseProjectResponse{Path: path})
 }
 
 func (s *Server) handleSimulate(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if err := r.Body.Close(); err != nil {
-			log.Printf("close request body: %v", err)
+			slog.Warn("close request body", "error", err)
 		}
 	}()
 
@@ -98,14 +118,28 @@ func (s *Server) handleSimulate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	projectPath := strings.TrimSpace(req.ProjectPath)
 	resp, status := s.simulator.Simulate(r.Context(), req)
+	if status < http.StatusBadRequest {
+		s.rememberProjectPath(projectPath)
+	}
 	writeJSON(w, status, resp)
+}
+
+func (s *Server) rememberProjectPath(path string) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return
+	}
+	if err := s.projectCache.Add(path); err != nil {
+		slog.Warn("cache project path", "path", path, "error", err)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(value); err != nil {
-		log.Printf("write response: %v", err)
+		slog.Warn("write response", "error", err)
 	}
 }

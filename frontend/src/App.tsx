@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { fetchChainConfig, fetchHealth, simulate } from "./api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchChainConfig, fetchHealth, fetchProjects, simulate } from "./api";
 import OutputPanel from "./components/OutputPanel";
 import RequestForm from "./components/RequestForm";
 import { explorerForChain } from "./explorer";
@@ -13,18 +14,16 @@ import {
 } from "./form";
 import { buildAddressLabels } from "./labels";
 import { loadPersistedUIState, savePersistedUIState } from "./persistence";
-import type { SimulateResponse } from "./types";
+import type { SimulateRequest, SimulateResponse } from "./types";
 
 export default function App() {
+  const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>(() => loadPersistedUIState().form);
-  const [chains, setChains] = useState<string[]>(["mainnet"]);
-  const [explorerUrls, setExplorerUrls] = useState<Record<string, string>>({});
-  const [status, setStatus] = useState<HealthStatus>("offline");
+  const [optimisticProjects, setOptimisticProjects] = useState<string[]>([]);
   const [requestTab, setRequestTab] = useState<RequestTab>(() => loadPersistedUIState().requestTab);
   const [outputView, setOutputView] = useState<OutputView>("trace");
   const [response, setResponse] = useState<SimulateResponse | null>(null);
   const [error, setError] = useState("");
-  const [isRunning, setIsRunning] = useState(false);
   const [expandMode, setExpandMode] = useState<ExpandMode>("depth");
   const [traceExpandDepth, setTraceExpandDepth] = useState(() => loadPersistedUIState().traceExpandDepth);
 
@@ -32,34 +31,33 @@ export default function App() {
     savePersistedUIState({ form, requestTab, traceExpandDepth });
   }, [form, requestTab, traceExpandDepth]);
 
+  const healthQuery = useQuery({
+    queryKey: ["health", form.apiUrl],
+    queryFn: () => fetchHealth(form.apiUrl),
+    refetchInterval: 10_000
+  });
+  const chainQuery = useQuery({
+    queryKey: ["chains", form.apiUrl],
+    queryFn: () => fetchChainConfig(form.apiUrl)
+  });
+  const projectQuery = useQuery({
+    queryKey: ["projects", form.apiUrl],
+    queryFn: () => fetchProjects(form.apiUrl)
+  });
+
+  const chains = chainQuery.data?.chains.length ? chainQuery.data.chains : ["mainnet"];
+  const explorerUrls = useMemo(() => chainQuery.data?.explorerUrls ?? {}, [chainQuery.data?.explorerUrls]);
+  const projectSuggestions = useMemo(
+    () => mergeProjects(optimisticProjects, projectQuery.data?.projects ?? []),
+    [optimisticProjects, projectQuery.data?.projects]
+  );
+  const status: HealthStatus = healthQuery.isSuccess ? (healthQuery.data ? "online" : "error") : healthQuery.isError ? "error" : "offline";
+
   useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const [ok, chainConfig] = await Promise.all([fetchHealth(form.apiUrl), fetchChainConfig(form.apiUrl)]);
-        if (cancelled) {
-          return;
-        }
-        setStatus(ok ? "online" : "error");
-        setExplorerUrls(chainConfig.explorerUrls);
-        if (chainConfig.chains.length > 0) {
-          setChains(chainConfig.chains);
-          if (!chainConfig.chains.includes(form.chain)) {
-            setForm((current) => ({ ...current, chain: chainConfig.chains[0] }));
-          }
-        }
-      } catch {
-        if (!cancelled) {
-          setStatus("error");
-        }
-      }
-    };
-    const timer = window.setTimeout(load, 250);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [form.apiUrl, form.chain]);
+    if (chainQuery.data?.chains.length && !chainQuery.data.chains.includes(form.chain)) {
+      setForm((current) => ({ ...current, chain: chainQuery.data.chains[0] }));
+    }
+  }, [chainQuery.data, form.chain]);
 
   const runMeta = useMemo(() => {
     if (!response) {
@@ -75,21 +73,24 @@ export default function App() {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setError("");
-    setIsRunning(true);
-    try {
-      const request = buildRequest(form);
-      const result = await simulate(form.apiUrl, request);
+  const simulation = useMutation({
+    mutationFn: ({ apiUrl, request }: { apiUrl: string; request: SimulateRequest }) => simulate(apiUrl, request),
+    onSuccess: (result, variables) => {
       setResponse(result);
       setOutputView(result.erc20Transfers?.length ? "flow" : result.balanceAnalysis ? "balances" : "trace");
       setExpandMode("depth");
-    } catch (err) {
+      setOptimisticProjects([]);
+      void queryClient.invalidateQueries({ queryKey: ["projects", variables.apiUrl] });
+    },
+    onError: (err) => {
       setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setIsRunning(false);
     }
+  });
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setError("");
+    simulation.mutate({ apiUrl: form.apiUrl, request: buildRequest(form) });
   };
 
   return (
@@ -98,9 +99,14 @@ export default function App() {
         chains={chains}
         error={error}
         form={form}
-        isRunning={isRunning}
+        isRunning={simulation.isPending}
+        projectSuggestions={projectSuggestions}
         requestTab={requestTab}
         status={status}
+        onProjectBrowsed={(path) => {
+          setOptimisticProjects((current) => mergeProjects([path], current).slice(0, 20));
+          void queryClient.invalidateQueries({ queryKey: ["projects", form.apiUrl] });
+        }}
         onRequestTabChange={setRequestTab}
         onSubmit={submit}
         onUpdate={update}
@@ -120,4 +126,17 @@ export default function App() {
       />
     </main>
   );
+}
+
+function mergeProjects(primary: string[], secondary: string[]): string[] {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const path of [...primary, ...secondary]) {
+    if (!path || seen.has(path)) {
+      continue;
+    }
+    seen.add(path);
+    merged.push(path);
+  }
+  return merged;
 }

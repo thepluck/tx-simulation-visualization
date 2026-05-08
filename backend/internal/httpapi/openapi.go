@@ -1,9 +1,32 @@
 package httpapi
 
-import "net/http"
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"reflect"
+	"strings"
 
-func (s *Server) handleOpenAPI(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, openAPISpec())
+	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/getkin/kin-openapi/openapi3gen"
+
+	"tx-simulation-visualization/backend/internal/model"
+)
+
+const (
+	addressPattern = `^0x[0-9a-fA-F]{40}$`
+	bytesPattern   = `^0x([0-9a-fA-F]{2})*$`
+	uint256Pattern = `^(0x[0-9a-fA-F]+|[0-9]+)$`
+)
+
+func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
+	spec, err := openAPISpec(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, model.ErrorResponse{Error: "generate openapi spec: " + err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, spec)
 }
 
 func (s *Server) handleSwaggerUI(w http.ResponseWriter, _ *http.Request) {
@@ -40,364 +63,341 @@ const swaggerHTML = `<!doctype html>
 </body>
 </html>`
 
-func openAPISpec() map[string]any {
-	return map[string]any{
-		"openapi": "3.0.3",
-		"info": map[string]any{
-			"title":   "Tx Simulation API",
-			"version": "0.1.0",
+func openAPISpec(ctx context.Context) (*openapi3.T, error) {
+	components := openapi3.NewComponents()
+	components.Schemas = openapi3.Schemas{}
+	spec := &openapi3.T{
+		OpenAPI: "3.0.3",
+		Info: &openapi3.Info{
+			Title:   "Tx Simulation API",
+			Version: "0.1.0",
 		},
-		"paths": map[string]any{
-			"/health": map[string]any{
-				"get": map[string]any{
-					"summary": "Backend health and configured chain count",
-					"responses": map[string]any{
-						"200": jsonResponse("#/components/schemas/HealthResponse"),
-					},
-				},
-			},
-			"/chains": map[string]any{
-				"get": map[string]any{
-					"summary": "List configured chain names",
-					"responses": map[string]any{
-						"200": jsonResponse("#/components/schemas/ChainsResponse"),
-					},
-				},
-			},
-			"/browse/project": map[string]any{
-				"get": map[string]any{
-					"summary": "Open a local folder picker and return a Foundry project path",
-					"responses": map[string]any{
-						"200": jsonResponse("#/components/schemas/BrowseProjectResponse"),
-						"400": jsonResponse("#/components/schemas/ErrorResponse"),
-					},
-				},
-			},
-			"/simulate": map[string]any{
-				"post": map[string]any{
-					"summary": "Run a Forge script simulation and return raw plus structured trace",
-					"requestBody": map[string]any{
-						"required": true,
-						"content": map[string]any{
-							"application/json": map[string]any{
-								"schema": map[string]any{"$ref": "#/components/schemas/SimulateRequest"},
-							},
-						},
-					},
-					"responses": map[string]any{
-						"200": jsonResponse("#/components/schemas/SimulateResponse"),
-						"400": jsonResponse("#/components/schemas/ErrorResponse"),
-						"429": jsonResponse("#/components/schemas/SimulateResponse"),
-						"500": jsonResponse("#/components/schemas/SimulateResponse"),
-						"504": jsonResponse("#/components/schemas/SimulateResponse"),
-					},
-				},
-			},
-		},
-		"components": map[string]any{
-			"schemas": map[string]any{
-				"HealthResponse": map[string]any{
-					"type":     "object",
-					"required": []string{"ok", "chains", "maxConcurrentRuns"},
-					"properties": map[string]any{
-						"ok":                map[string]any{"type": "boolean"},
-						"chains":            map[string]any{"type": "integer"},
-						"maxConcurrentRuns": map[string]any{"type": "integer"},
-					},
-				},
-				"ChainsResponse": map[string]any{
-					"type":     "object",
-					"required": []string{"chains"},
-					"properties": map[string]any{
-						"chains": map[string]any{
-							"type":  "array",
-							"items": map[string]any{"type": "string"},
-						},
-						"explorerUrls": map[string]any{
-							"type":                 "object",
-							"description":          "Map of configured chain name to block explorer base URL.",
-							"additionalProperties": map[string]any{"type": "string", "format": "uri"},
-						},
-					},
-				},
-				"BrowseProjectResponse": map[string]any{
-					"type":     "object",
-					"required": []string{"path"},
-					"properties": map[string]any{
-						"path": map[string]any{
-							"type":        "string",
-							"description": "Absolute path selected by the local backend folder picker.",
-							"example":     "/Users/me/foundry-project",
-						},
-					},
-				},
-				"SimulateRequest": map[string]any{
-					"type":     "object",
-					"required": []string{"chain", "blockNumber", "sender", "target", "data"},
-					"properties": map[string]any{
-						"chain":       map[string]any{"type": "string", "example": "mainnet"},
-						"blockNumber": uintStringSchema("23000000"),
-						"projectPath": map[string]any{
-							"type":        "string",
-							"description": "Optional Foundry project root. When set, the backend runs `forge build src`, copies the simulation script under this project's script folder, and runs forge script with this root.",
-							"example":     "/Users/me/project",
-						},
-						"labelOverrides":         arraySchema("#/components/schemas/LabelOverride"),
-						"erc20BalanceOverrides":  arraySchema("#/components/schemas/ERC20BalanceOverride"),
-						"erc20ApprovalOverrides": arraySchema("#/components/schemas/ERC20ApprovalOverride"),
-						"erc721ApprovalOverrides": arraySchema(
-							"#/components/schemas/ERC721ApprovalOverride",
-						),
-						"stateOverride":             map[string]any{"$ref": "#/components/schemas/StateOverride"},
-						"stateOverrideCode":         map[string]any{"type": "string", "deprecated": true},
-						"stateOverrideContractName": map[string]any{"type": "string", "deprecated": true},
-						"compiler":                  map[string]any{"$ref": "#/components/schemas/CompilerConfig"},
-						"etherscanApiKey": map[string]any{
-							"type":        "string",
-							"format":      "password",
-							"description": "Optional Etherscan or Etherscan-equivalent API key passed to `forge script --etherscan-api-key`.",
-						},
-						"sender": addressSchema("0x0000000000000000000000000000000000000001"),
-						"target": addressSchema("0x0000000000000000000000000000000000000002"),
-						"data":   bytesSchema("0x"),
-					},
-				},
-				"LabelOverride": map[string]any{
-					"type":     "object",
-					"required": []string{"account", "label"},
-					"properties": map[string]any{
-						"account": addressSchema("0x0000000000000000000000000000000000000001"),
-						"label":   map[string]any{"type": "string", "example": "WETHOwner"},
-					},
-				},
-				"ERC20BalanceOverride": map[string]any{
-					"type":     "object",
-					"required": []string{"token", "account", "balance"},
-					"properties": map[string]any{
-						"token":   addressSchema("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"),
-						"account": addressSchema("0x0000000000000000000000000000000000000001"),
-						"balance": uintStringSchema("1000000000000000000"),
-					},
-				},
-				"ERC20ApprovalOverride": map[string]any{
-					"type":     "object",
-					"required": []string{"token", "owner", "spender", "amount"},
-					"properties": map[string]any{
-						"token":   addressSchema("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"),
-						"owner":   addressSchema("0x0000000000000000000000000000000000000001"),
-						"spender": addressSchema("0x0000000000000000000000000000000000000002"),
-						"amount":  uintStringSchema("1000000000000000000"),
-					},
-				},
-				"ERC721ApprovalOverride": map[string]any{
-					"type":     "object",
-					"required": []string{"token", "owner", "spender", "tokenId"},
-					"properties": map[string]any{
-						"token":   addressSchema("0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D"),
-						"owner":   addressSchema("0x0000000000000000000000000000000000000001"),
-						"spender": addressSchema("0x0000000000000000000000000000000000000002"),
-						"tokenId": uintStringSchema("1"),
-					},
-				},
-				"StateOverride": map[string]any{
-					"type":     "object",
-					"required": []string{"source"},
-					"properties": map[string]any{
-						"contractName": map[string]any{"type": "string", "example": "MyStateOverride"},
-						"source":       map[string]any{"type": "string"},
-					},
-				},
-				"CompilerConfig": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"use": map[string]any{
-							"type":        "string",
-							"description": "Maps to forge script --use <SOLC_VERSION>.",
-							"example":     "0.8.30",
-						},
-						"offline": map[string]any{
-							"type":        "boolean",
-							"description": "Maps to --offline.",
-						},
-						"noAutoDetect": map[string]any{
-							"type":        "boolean",
-							"description": "Maps to --no-auto-detect.",
-						},
-						"viaIR": map[string]any{
-							"type":        "boolean",
-							"default":     true,
-							"description": "Maps to --via-ir. Defaults to true for this backend.",
-						},
-						"useLiteralContent": map[string]any{
-							"type":        "boolean",
-							"description": "Maps to --use-literal-content.",
-						},
-						"noMetadata": map[string]any{
-							"type":        "boolean",
-							"description": "Maps to --no-metadata.",
-						},
-						"evmVersion": map[string]any{
-							"type":        "string",
-							"description": "Maps to --evm-version <VERSION>.",
-							"example":     "cancun",
-						},
-						"optimize": map[string]any{
-							"type":        "boolean",
-							"default":     true,
-							"description": "Maps to --optimize. Defaults to true for this backend.",
-						},
-						"optimizerRuns": map[string]any{
-							"type":        "integer",
-							"minimum":     0,
-							"maximum":     4294967295,
-							"description": "Maps to --optimizer-runs <RUNS>.",
-							"example":     200,
-						},
-						"revertStrings": map[string]any{
-							"type":        "string",
-							"enum":        []string{"default", "strip", "debug", "verboseDebug"},
-							"description": "Maps to --revert-strings <REVERT>.",
-							"example":     "default",
-						},
-					},
-				},
-				"SimulateResponse": map[string]any{
-					"type":     "object",
-					"required": []string{"id", "success", "exitCode", "durationMillis", "trace"},
-					"properties": map[string]any{
-						"id":             map[string]any{"type": "string"},
-						"success":        map[string]any{"type": "boolean"},
-						"exitCode":       map[string]any{"type": "integer"},
-						"durationMillis": map[string]any{"type": "integer"},
-						"trace":          map[string]any{"type": "string"},
-						"structuredTrace": map[string]any{
-							"type":  "array",
-							"items": map[string]any{"$ref": "#/components/schemas/TraceNode"},
-						},
-						"erc20Transfers": map[string]any{
-							"type":  "array",
-							"items": map[string]any{"$ref": "#/components/schemas/ERC20Transfer"},
-						},
-						"balanceAnalysis": map[string]any{"$ref": "#/components/schemas/BalanceAnalysis"},
-						"error":           map[string]any{"type": "string"},
-					},
-				},
-				"ERC20Transfer": map[string]any{
-					"type":     "object",
-					"required": []string{"token", "from", "to", "amount"},
-					"properties": map[string]any{
-						"token":            map[string]any{"type": "string"},
-						"from":             map[string]any{"type": "string"},
-						"to":               map[string]any{"type": "string"},
-						"amount":           map[string]any{"type": "string"},
-						"normalizedAmount": map[string]any{"type": "string"},
-						"symbol":           map[string]any{"type": "string"},
-						"logoUrl":          map[string]any{"type": "string", "format": "uri"},
-					},
-				},
-				"BalanceAnalysis": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"changes": map[string]any{
-							"type":  "array",
-							"items": map[string]any{"$ref": "#/components/schemas/TokenBalanceChange"},
-						},
-						"userTotals": map[string]any{
-							"type":  "array",
-							"items": map[string]any{"$ref": "#/components/schemas/UserUSDChange"},
-						},
-					},
-				},
-				"TokenBalanceChange": map[string]any{
-					"type":     "object",
-					"required": []string{"user", "token", "rawAmount", "amount"},
-					"properties": map[string]any{
-						"user":      map[string]any{"type": "string"},
-						"token":     map[string]any{"type": "string"},
-						"symbol":    map[string]any{"type": "string"},
-						"logoUrl":   map[string]any{"type": "string", "format": "uri"},
-						"rawAmount": map[string]any{"type": "string"},
-						"amount":    map[string]any{"type": "string"},
-						"usdValue":  map[string]any{"type": "number"},
-					},
-				},
-				"UserUSDChange": map[string]any{
-					"type":     "object",
-					"required": []string{"user", "usdValue"},
-					"properties": map[string]any{
-						"user":     map[string]any{"type": "string"},
-						"usdValue": map[string]any{"type": "number"},
-					},
-				},
-				"TraceNode": map[string]any{
-					"type":     "object",
-					"required": []string{"raw", "kind"},
-					"properties": map[string]any{
-						"raw":        map[string]any{"type": "string"},
-						"kind":       map[string]any{"type": "string", "enum": []string{"call", "return", "revert", "event", "error", "result", "unknown"}},
-						"gas":        map[string]any{"type": "integer"},
-						"target":     map[string]any{"type": "string"},
-						"function":   map[string]any{"type": "string"},
-						"arguments":  map[string]any{"type": "string"},
-						"callType":   map[string]any{"type": "string"},
-						"resultType": map[string]any{"type": "string"},
-						"value":      map[string]any{"type": "string"},
-						"children": map[string]any{
-							"type":  "array",
-							"items": map[string]any{"$ref": "#/components/schemas/TraceNode"},
-						},
-					},
-				},
-				"ErrorResponse": map[string]any{
-					"type":     "object",
-					"required": []string{"error"},
-					"properties": map[string]any{
-						"error": map[string]any{"type": "string"},
-					},
-				},
-			},
-		},
+		Paths:      openapi3.NewPaths(),
+		Components: &components,
+	}
+
+	if err := registerOpenAPISchemas(spec.Components.Schemas); err != nil {
+		return nil, err
+	}
+	enrichOpenAPISchemas(spec.Components.Schemas)
+	addOpenAPIOperations(spec)
+
+	if err := validateOpenAPISpec(ctx, spec); err != nil {
+		return nil, err
+	}
+	return spec, nil
+}
+
+func validateOpenAPISpec(ctx context.Context, spec *openapi3.T) error {
+	value, err := json.Marshal(spec)
+	if err != nil {
+		return err
+	}
+	loader := openapi3.NewLoader()
+	loader.Context = ctx
+	loaded, err := loader.LoadFromData(value)
+	if err != nil {
+		return err
+	}
+	return loaded.Validate(ctx)
+}
+
+func registerOpenAPISchemas(schemas openapi3.Schemas) error {
+	for _, item := range []struct {
+		name  string
+		value any
+	}{
+		{"HealthResponse", model.HealthResponse{}},
+		{"ChainsResponse", model.ChainsResponse{}},
+		{"ProjectsResponse", model.ProjectsResponse{}},
+		{"BrowseProjectResponse", model.BrowseProjectResponse{}},
+		{"SimulateRequest", model.SimulateRequest{}},
+		{"LabelOverride", model.LabelOverride{}},
+		{"ERC20BalanceOverride", model.ERC20BalanceOverride{}},
+		{"ERC20ApprovalOverride", model.ERC20ApprovalOverride{}},
+		{"ERC721ApprovalOverride", model.ERC721ApprovalOverride{}},
+		{"StateOverride", model.StateOverride{}},
+		{"CompilerConfig", model.CompilerConfig{}},
+		{"SimulateResponse", model.SimulateResponse{}},
+		{"ERC20Transfer", model.ERC20Transfer{}},
+		{"BalanceAnalysis", model.BalanceAnalysis{}},
+		{"TokenBalanceChange", model.TokenBalanceChange{}},
+		{"UserUSDChange", model.UserUSDChange{}},
+		{"TraceNode", model.TraceNode{}},
+		{"ErrorResponse", model.ErrorResponse{}},
+	} {
+		if err := registerOpenAPISchema(schemas, item.name, item.value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func registerOpenAPISchema(schemas openapi3.Schemas, name string, value any) error {
+	ref, err := openapi3gen.NewSchemaRefForValue(value, schemas, openapi3gen.CreateComponentSchemas(openapi3gen.ExportComponentSchemasOptions{
+		ExportComponentSchemas: true,
+		ExportTopLevelSchema:   true,
+	}), openapi3gen.CreateTypeNameGenerator(openAPITypeName), openapi3gen.SchemaCustomizer(openAPISchemaCustomizer))
+	if err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	if generated := concreteSchemaRef(schemas[name]); generated != nil {
+		schemas[name] = generated
+		return nil
+	}
+	if generated := concreteSchemaRef(ref); generated != nil {
+		schemas[name] = generated
+		return nil
+	}
+	refName := strings.TrimPrefix(ref.Ref, "#/components/schemas/")
+	if refName != ref.Ref {
+		if generated := concreteSchemaRef(schemas[refName]); generated != nil {
+			schemas[name] = generated
+			return nil
+		}
+	}
+
+	inlineRef, err := openapi3gen.NewSchemaRefForValue(value, schemas, openapi3gen.CreateTypeNameGenerator(openAPITypeName), openapi3gen.SchemaCustomizer(openAPISchemaCustomizer))
+	if err != nil {
+		return fmt.Errorf("%s inline schema: %w", name, err)
+	}
+	if generated := concreteSchemaRef(inlineRef); generated != nil {
+		schemas[name] = generated
+		return nil
+	}
+	return fmt.Errorf("%s schema was not generated", name)
+}
+
+func concreteSchemaRef(ref *openapi3.SchemaRef) *openapi3.SchemaRef {
+	if ref == nil || ref.Value == nil {
+		return nil
+	}
+	return &openapi3.SchemaRef{Value: ref.Value}
+}
+
+func openAPITypeName(t reflect.Type) string {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t.Name() != "" {
+		return t.Name()
+	}
+	return strings.NewReplacer(".", "_", "[]", "Array").Replace(t.String())
+}
+
+func openAPISchemaCustomizer(_ string, t reflect.Type, tag reflect.StructTag, schema *openapi3.Schema) error {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t == reflect.TypeOf(model.Uint256("")) {
+		schema.Type = &openapi3.Types{"string"}
+		schema.Pattern = uint256Pattern
+		schema.Example = "1000000000000000000"
+		return nil
+	}
+
+	validateTag := tag.Get("validate")
+	if strings.Contains(validateTag, "eth_address") {
+		schema.Type = &openapi3.Types{"string"}
+		schema.Pattern = addressPattern
+	}
+	if strings.Contains(validateTag, "hex_bytes") {
+		schema.Type = &openapi3.Types{"string"}
+		schema.Pattern = bytesPattern
+	}
+	return nil
+}
+
+func enrichOpenAPISchemas(schemas openapi3.Schemas) {
+	setPropertyExample(schemas, "SimulateRequest", "chain", "mainnet")
+	setPropertyDescription(schemas, "SimulateRequest", "projectPath", "Optional Foundry project root. When set, the backend runs `forge build src`, copies `contracts/src/SimulateTx.s.sol` under this project's script folder, and runs forge script with this root.")
+	setPropertyExample(schemas, "SimulateRequest", "projectPath", "~/project")
+	setPropertyDescription(schemas, "SimulateRequest", "etherscanApiKey", "Optional Etherscan or Etherscan-equivalent API key passed to `forge script --etherscan-api-key`.")
+	setPropertyFormat(schemas, "SimulateRequest", "etherscanApiKey", "password")
+	setPropertyDeprecated(schemas, "SimulateRequest", "stateOverrideCode")
+	setPropertyDeprecated(schemas, "SimulateRequest", "stateOverrideContractName")
+	setPropertyExample(schemas, "SimulateRequest", "sender", "0x0000000000000000000000000000000000000001")
+	setPropertyExample(schemas, "SimulateRequest", "target", "0x0000000000000000000000000000000000000002")
+	setPropertyExample(schemas, "SimulateRequest", "data", "0x")
+
+	setPropertyDescription(schemas, "ChainsResponse", "explorerUrls", "Map of configured chain name to block explorer base URL.")
+	setPropertyDescription(schemas, "ProjectsResponse", "projects", "Most recently used Foundry project paths.")
+	setPropertyDescription(schemas, "BrowseProjectResponse", "path", "Absolute path selected by the local backend folder picker.")
+	setPropertyExample(schemas, "BrowseProjectResponse", "path", "~/foundry-project")
+
+	setPropertyExample(schemas, "LabelOverride", "account", "0x0000000000000000000000000000000000000001")
+	setPropertyExample(schemas, "LabelOverride", "label", "WETHOwner")
+	setPropertyExample(schemas, "ERC20BalanceOverride", "token", "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
+	setPropertyExample(schemas, "ERC20BalanceOverride", "account", "0x0000000000000000000000000000000000000001")
+	setPropertyExample(schemas, "ERC20ApprovalOverride", "token", "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
+	setPropertyExample(schemas, "ERC20ApprovalOverride", "owner", "0x0000000000000000000000000000000000000001")
+	setPropertyExample(schemas, "ERC20ApprovalOverride", "spender", "0x0000000000000000000000000000000000000002")
+	setPropertyExample(schemas, "ERC721ApprovalOverride", "token", "0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D")
+	setPropertyExample(schemas, "ERC721ApprovalOverride", "owner", "0x0000000000000000000000000000000000000001")
+	setPropertyExample(schemas, "ERC721ApprovalOverride", "spender", "0x0000000000000000000000000000000000000002")
+	setPropertyExample(schemas, "StateOverride", "contractName", "MyStateOverride")
+
+	setPropertyDescription(schemas, "CompilerConfig", "use", "Maps to forge script --use <SOLC_VERSION>.")
+	setPropertyExample(schemas, "CompilerConfig", "use", "0.8.30")
+	setPropertyDescription(schemas, "CompilerConfig", "offline", "Maps to --offline.")
+	setPropertyDescription(schemas, "CompilerConfig", "noAutoDetect", "Maps to --no-auto-detect.")
+	setPropertyDescription(schemas, "CompilerConfig", "viaIR", "Maps to --via-ir. Defaults to true for this backend.")
+	setPropertyDefault(schemas, "CompilerConfig", "viaIR", true)
+	setPropertyDescription(schemas, "CompilerConfig", "useLiteralContent", "Maps to --use-literal-content.")
+	setPropertyDescription(schemas, "CompilerConfig", "noMetadata", "Maps to --no-metadata.")
+	setPropertyDescription(schemas, "CompilerConfig", "evmVersion", "Maps to --evm-version <VERSION>.")
+	setPropertyExample(schemas, "CompilerConfig", "evmVersion", "cancun")
+	setPropertyDescription(schemas, "CompilerConfig", "optimize", "Maps to --optimize. Defaults to true for this backend.")
+	setPropertyDefault(schemas, "CompilerConfig", "optimize", true)
+	setPropertyDescription(schemas, "CompilerConfig", "optimizerRuns", "Maps to --optimizer-runs <RUNS>.")
+	setPropertyMinMax(schemas, "CompilerConfig", "optimizerRuns", 0, 4294967295)
+	setPropertyExample(schemas, "CompilerConfig", "optimizerRuns", 200)
+	setPropertyDescription(schemas, "CompilerConfig", "revertStrings", "Maps to --revert-strings <REVERT>.")
+	setPropertyEnum(schemas, "CompilerConfig", "revertStrings", "default", "strip", "debug", "verboseDebug")
+	setPropertyExample(schemas, "CompilerConfig", "revertStrings", "default")
+
+	setPropertyEnum(schemas, "TraceNode", "kind", "call", "return", "revert", "event", "error", "result", "unknown")
+
+	if schema := schemaValue(schemas, "Uint256"); schema != nil {
+		schema.Type = &openapi3.Types{"string"}
+		schema.Pattern = uint256Pattern
+		schema.Example = "1000000000000000000"
 	}
 }
 
-func jsonResponse(schemaRef string) map[string]any {
-	return map[string]any{
-		"description": "OK",
-		"content": map[string]any{
-			"application/json": map[string]any{
-				"schema": map[string]any{"$ref": schemaRef},
-			},
-		},
+func addOpenAPIOperations(spec *openapi3.T) {
+	spec.AddOperation("/health", http.MethodGet, getOperation(
+		"Backend health and configured chain count",
+		"HealthResponse",
+	))
+	spec.AddOperation("/chains", http.MethodGet, getOperation(
+		"List configured chain names",
+		"ChainsResponse",
+	))
+	spec.AddOperation("/projects", http.MethodGet, getOperation(
+		"List recently used Foundry project paths",
+		"ProjectsResponse",
+	))
+	spec.AddOperation("/browse/project", http.MethodGet, getOperation(
+		"Open a local folder picker and return a Foundry project path",
+		"BrowseProjectResponse",
+		withErrorResponse(http.StatusBadRequest, "ErrorResponse"),
+	))
+
+	op := postOperation(
+		"Run a Forge script simulation and return raw plus structured trace",
+		"SimulateRequest",
+		"SimulateResponse",
+	)
+	for _, status := range []int{http.StatusBadRequest} {
+		op.Responses.Set(fmt.Sprintf("%d", status), jsonResponse("ErrorResponse", http.StatusText(status)))
+	}
+	for _, status := range []int{http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusGatewayTimeout} {
+		op.Responses.Set(fmt.Sprintf("%d", status), jsonResponse("SimulateResponse", http.StatusText(status)))
+	}
+	spec.AddOperation("/simulate", http.MethodPost, op)
+}
+
+type operationOption func(*openapi3.Operation)
+
+func withErrorResponse(status int, schemaName string) operationOption {
+	return func(op *openapi3.Operation) {
+		op.Responses.Set(fmt.Sprintf("%d", status), jsonResponse(schemaName, http.StatusText(status)))
 	}
 }
 
-func arraySchema(itemRef string) map[string]any {
-	return map[string]any{
-		"type":  "array",
-		"items": map[string]any{"$ref": itemRef},
+func getOperation(summary string, responseSchema string, options ...operationOption) *openapi3.Operation {
+	op := openapi3.NewOperation()
+	op.Summary = summary
+	op.Responses = openapi3.NewResponses()
+	op.Responses.Set("200", jsonResponse(responseSchema, "OK"))
+	for _, option := range options {
+		option(op)
+	}
+	return op
+}
+
+func postOperation(summary string, requestSchema string, responseSchema string) *openapi3.Operation {
+	op := getOperation(summary, responseSchema)
+	op.RequestBody = &openapi3.RequestBodyRef{
+		Value: openapi3.NewRequestBody().
+			WithRequired(true).
+			WithJSONSchemaRef(schemaRef(requestSchema)),
+	}
+	return op
+}
+
+func jsonResponse(schemaName string, description string) *openapi3.ResponseRef {
+	return &openapi3.ResponseRef{
+		Value: openapi3.NewResponse().
+			WithDescription(description).
+			WithJSONSchemaRef(schemaRef(schemaName)),
 	}
 }
 
-func addressSchema(example string) map[string]any {
-	return map[string]any{
-		"type":    "string",
-		"pattern": "^0x[0-9a-fA-F]{40}$",
-		"example": example,
+func schemaRef(name string) *openapi3.SchemaRef {
+	return openapi3.NewSchemaRef("#/components/schemas/"+name, nil)
+}
+
+func schemaValue(schemas openapi3.Schemas, schemaName string) *openapi3.Schema {
+	ref := schemas[schemaName]
+	if ref == nil {
+		return nil
+	}
+	return ref.Value
+}
+
+func propertyValue(schemas openapi3.Schemas, schemaName string, propertyName string) *openapi3.Schema {
+	schema := schemaValue(schemas, schemaName)
+	if schema == nil {
+		return nil
+	}
+	ref := schema.Properties[propertyName]
+	if ref == nil {
+		return nil
+	}
+	return ref.Value
+}
+
+func setPropertyDescription(schemas openapi3.Schemas, schemaName string, propertyName string, description string) {
+	if property := propertyValue(schemas, schemaName, propertyName); property != nil {
+		property.Description = description
 	}
 }
 
-func bytesSchema(example string) map[string]any {
-	return map[string]any{
-		"type":    "string",
-		"pattern": "^0x([0-9a-fA-F]{2})*$",
-		"example": example,
+func setPropertyExample(schemas openapi3.Schemas, schemaName string, propertyName string, example any) {
+	if property := propertyValue(schemas, schemaName, propertyName); property != nil {
+		property.Example = example
 	}
 }
 
-func uintStringSchema(example string) map[string]any {
-	return map[string]any{
-		"type":    "string",
-		"pattern": "^(0x[0-9a-fA-F]+|[0-9]+)$",
-		"example": example,
+func setPropertyFormat(schemas openapi3.Schemas, schemaName string, propertyName string, format string) {
+	if property := propertyValue(schemas, schemaName, propertyName); property != nil {
+		property.Format = format
+	}
+}
+
+func setPropertyDeprecated(schemas openapi3.Schemas, schemaName string, propertyName string) {
+	if property := propertyValue(schemas, schemaName, propertyName); property != nil {
+		property.Deprecated = true
+	}
+}
+
+func setPropertyDefault(schemas openapi3.Schemas, schemaName string, propertyName string, value any) {
+	if property := propertyValue(schemas, schemaName, propertyName); property != nil {
+		property.Default = value
+	}
+}
+
+func setPropertyEnum(schemas openapi3.Schemas, schemaName string, propertyName string, values ...any) {
+	if property := propertyValue(schemas, schemaName, propertyName); property != nil {
+		property.Enum = values
+	}
+}
+
+func setPropertyMinMax(schemas openapi3.Schemas, schemaName string, propertyName string, min float64, max float64) {
+	if property := propertyValue(schemas, schemaName, propertyName); property != nil {
+		property.Min = &min
+		property.Max = &max
 	}
 }

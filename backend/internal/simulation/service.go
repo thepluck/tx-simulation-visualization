@@ -2,7 +2,6 @@ package simulation
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -21,8 +20,10 @@ import (
 )
 
 const (
-	localScriptTarget  = "contracts/SimulateTx.s.sol:SimulateTxScript"
 	scriptContractName = "SimulateTxScript"
+	localFoundryDir    = "contracts"
+	localScriptRelPath = "src/SimulateTx.s.sol"
+	localScriptTarget  = localFoundryDir + "/" + localScriptRelPath + ":" + scriptContractName
 	senderLabel        = "Sender"
 )
 
@@ -66,6 +67,14 @@ func (e *foundryExecution) cleanup() {
 	for i := len(e.tempFiles) - 1; i >= 0; i-- {
 		_ = os.Remove(e.tempFiles[i])
 	}
+}
+
+func (s *Service) localFoundryRoot() string {
+	return filepath.Join(s.cfg.RepoRoot, localFoundryDir)
+}
+
+func (s *Service) localScriptPath() string {
+	return filepath.Join(s.localFoundryRoot(), filepath.FromSlash(localScriptRelPath))
 }
 
 func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (model.SimulateResponse, int) {
@@ -181,14 +190,14 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 func (s *Service) validateRequest(req *model.SimulateRequest) (string, error) {
 	req.Chain = strings.TrimSpace(req.Chain)
 	req.EtherscanAPIKey = strings.TrimSpace(req.EtherscanAPIKey)
-	if req.Chain == "" {
-		return "", errors.New("chain is required")
-	}
 	projectPath, err := s.normalizeProjectPath(req.ProjectPath)
 	if err != nil {
 		return "", err
 	}
 	req.ProjectPath = projectPath
+	if err := validateSimulateRequest(req); err != nil {
+		return "", err
+	}
 
 	rpcURL, ok := s.cfg.RPCURLs[req.Chain]
 	if !ok {
@@ -198,76 +207,12 @@ func (s *Service) validateRequest(req *model.SimulateRequest) (string, error) {
 		return "", fmt.Errorf("rpc url for chain %q is empty after environment expansion", req.Chain)
 	}
 
-	if req.BlockNumber == "" {
-		return "", errors.New("blockNumber is required")
-	}
-	if err := solidity.ValidateAddress("sender", req.Sender); err != nil {
-		return "", err
-	}
-	if err := solidity.ValidateAddress("target", req.Target); err != nil {
-		return "", err
-	}
 	normalizedData, err := solidity.NormalizeBytes("data", req.Data)
 	if err != nil {
 		return "", err
 	}
 	req.Data = normalizedData
 	ensureSenderLabel(req)
-
-	for i := range req.LabelOverrides {
-		item := &req.LabelOverrides[i]
-		if err := solidity.ValidateAddress(fmt.Sprintf("labelOverrides[%d].account", i), item.Account); err != nil {
-			return "", err
-		}
-		if strings.TrimSpace(item.Label) == "" {
-			return "", fmt.Errorf("labelOverrides[%d].label is required", i)
-		}
-	}
-
-	for i := range req.ERC20BalanceOverrides {
-		item := &req.ERC20BalanceOverrides[i]
-		if err := solidity.ValidateAddress(fmt.Sprintf("erc20BalanceOverrides[%d].token", i), item.Token); err != nil {
-			return "", err
-		}
-		if err := solidity.ValidateAddress(fmt.Sprintf("erc20BalanceOverrides[%d].account", i), item.Account); err != nil {
-			return "", err
-		}
-		if item.Balance == "" {
-			return "", fmt.Errorf("erc20BalanceOverrides[%d].balance is required", i)
-		}
-	}
-
-	for i := range req.ERC20ApprovalOverrides {
-		item := &req.ERC20ApprovalOverrides[i]
-		if err := solidity.ValidateAddress(fmt.Sprintf("erc20ApprovalOverrides[%d].token", i), item.Token); err != nil {
-			return "", err
-		}
-		if err := solidity.ValidateAddress(fmt.Sprintf("erc20ApprovalOverrides[%d].owner", i), item.Owner); err != nil {
-			return "", err
-		}
-		if err := solidity.ValidateAddress(fmt.Sprintf("erc20ApprovalOverrides[%d].spender", i), item.Spender); err != nil {
-			return "", err
-		}
-		if item.Amount == "" {
-			return "", fmt.Errorf("erc20ApprovalOverrides[%d].amount is required", i)
-		}
-	}
-
-	for i := range req.ERC721ApprovalOverrides {
-		item := &req.ERC721ApprovalOverrides[i]
-		if err := solidity.ValidateAddress(fmt.Sprintf("erc721ApprovalOverrides[%d].token", i), item.Token); err != nil {
-			return "", err
-		}
-		if err := solidity.ValidateAddress(fmt.Sprintf("erc721ApprovalOverrides[%d].owner", i), item.Owner); err != nil {
-			return "", err
-		}
-		if err := solidity.ValidateAddress(fmt.Sprintf("erc721ApprovalOverrides[%d].spender", i), item.Spender); err != nil {
-			return "", err
-		}
-		if item.TokenID == "" {
-			return "", fmt.Errorf("erc721ApprovalOverrides[%d].tokenId is required", i)
-		}
-	}
 
 	if err := validateCompilerConfig(req.Compiler); err != nil {
 		return "", err
@@ -290,6 +235,11 @@ func (s *Service) normalizeProjectPath(value string) (string, error) {
 	if value == "" {
 		return "", nil
 	}
+	expandedValue, err := expandHomePath(value)
+	if err != nil {
+		return "", err
+	}
+	value = expandedValue
 	if resolved, ok := existingDirectoryPath(s.cfg.RepoRoot, value); ok {
 		return resolved, nil
 	}
@@ -329,10 +279,29 @@ func existingDirectoryPath(baseDir string, value string) (string, bool) {
 
 func absoluteProjectPath(baseDir string, value string) (string, error) {
 	value = strings.TrimSpace(value)
+	expanded, err := expandHomePath(value)
+	if err != nil {
+		return "", err
+	}
+	value = expanded
 	if !filepath.IsAbs(value) {
 		value = filepath.Join(baseDir, value)
 	}
 	return filepath.Abs(value)
+}
+
+func expandHomePath(value string) (string, error) {
+	if value != "~" && !strings.HasPrefix(value, "~/") {
+		return value, nil
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	if value == "~" {
+		return homeDir, nil
+	}
+	return filepath.Join(homeDir, strings.TrimPrefix(value, "~/")), nil
 }
 
 func pathSuffixes(value string) []string {
@@ -370,9 +339,9 @@ func validateCompilerConfig(config *model.CompilerConfig) error {
 func (s *Service) prepareFoundryExecution(req *model.SimulateRequest, runID string) (foundryExecution, error) {
 	if req.ProjectPath == "" {
 		return foundryExecution{
-			Root:         s.cfg.RepoRoot,
+			Root:         s.localFoundryRoot(),
 			ScriptTarget: localScriptTarget,
-			ScriptPath:   filepath.Join(s.cfg.RepoRoot, "contracts", "SimulateTx.s.sol"),
+			ScriptPath:   s.localScriptPath(),
 		}, nil
 	}
 
@@ -385,7 +354,7 @@ func (s *Service) prepareFoundryExecution(req *model.SimulateRequest, runID stri
 		return foundryExecution{}, err
 	}
 
-	sourcePath := filepath.Join(s.cfg.RepoRoot, "contracts", "SimulateTx.s.sol")
+	sourcePath := s.localScriptPath()
 	source, err := os.ReadFile(sourcePath)
 	if err != nil {
 		return foundryExecution{}, err
@@ -420,6 +389,14 @@ func (s *Service) writeStateOverrideSource(runDir string, execution *foundryExec
 	}
 
 	statePath := filepath.Join(runDir, "StateOverride.sol")
+	if execution.Root != "" {
+		stateDir := filepath.Join(execution.Root, ".txsim", safeRunID(runID))
+		if err := os.MkdirAll(stateDir, 0o755); err != nil {
+			return "", err
+		}
+		statePath = filepath.Join(stateDir, "StateOverride.sol")
+		execution.tempFiles = append(execution.tempFiles, stateDir, statePath)
+	}
 	if err := os.WriteFile(statePath, []byte(source), 0o644); err != nil {
 		return "", err
 	}

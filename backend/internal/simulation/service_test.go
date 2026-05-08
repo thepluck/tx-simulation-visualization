@@ -175,11 +175,11 @@ func TestSimulateNFTApprovalAndTransferFrom(t *testing.T) {
 
 func TestSimulateReturnsTraceWhenScriptFailsWithoutFundFlow(t *testing.T) {
 	repoRoot := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repoRoot, "contracts"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repoRoot, "contracts", "src"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	scriptSource := []byte("// SPDX-License-Identifier: UNLICENSED\npragma solidity ^0.8.0;\ncontract SimulateTxScript {}\n")
-	if err := os.WriteFile(filepath.Join(repoRoot, "contracts", "SimulateTx.s.sol"), scriptSource, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repoRoot, "contracts", "src", "SimulateTx.s.sol"), scriptSource, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -257,11 +257,11 @@ func TestSimulateReturnsTraceWhenScriptFailsWithoutFundFlow(t *testing.T) {
 
 func TestSimulateExternalProjectBuildsSrcCompilesOverrideAndRunsCopiedScript(t *testing.T) {
 	repoRoot := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repoRoot, "contracts"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repoRoot, "contracts", "src"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	scriptSource := []byte("// SPDX-License-Identifier: UNLICENSED\npragma solidity ^0.8.0;\ncontract SimulateTxScript {}\n")
-	if err := os.WriteFile(filepath.Join(repoRoot, "contracts", "SimulateTx.s.sol"), scriptSource, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repoRoot, "contracts", "src", "SimulateTx.s.sol"), scriptSource, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -360,6 +360,27 @@ func TestNormalizeProjectPathResolvesMountedProjectRoot(t *testing.T) {
 	})
 
 	got, err := service.normalizeProjectPath("/host-only/workspaces/ks-dex-aggregator-sc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != projectRoot {
+		t.Fatalf("normalized project path = %q, want %q", got, projectRoot)
+	}
+}
+
+func TestNormalizeProjectPathExpandsHome(t *testing.T) {
+	homeDir := t.TempDir()
+	projectRoot := filepath.Join(homeDir, "foundry-project")
+	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", homeDir)
+
+	service := NewService(config.Config{
+		RepoRoot: t.TempDir(),
+	})
+
+	got, err := service.normalizeProjectPath("~/foundry-project")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,7 +1,22 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { displayAddress, labelForAddress, type AddressLabels } from "../labels";
-import { formatFlowAmount, shortAddress } from "../format";
+import {
+  Background,
+  BaseEdge,
+  Controls,
+  EdgeLabelRenderer,
+  MarkerType,
+  Position,
+  ReactFlow,
+  getBezierPath,
+  type Edge,
+  type EdgeProps,
+  type Node,
+  type NodeProps
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 import { explorerAddressUrl } from "../explorer";
+import { formatFlowAmount, shortAddress } from "../format";
+import { displayAddress, labelForAddress, type AddressLabels } from "../labels";
 import type { BalanceAnalysis, ERC20Transfer } from "../types";
 import AddressReference from "./AddressReference";
 import TokenLogo from "./TokenLogo";
@@ -11,25 +26,28 @@ type TokenMetadata = {
   symbol?: string;
 };
 
-type GraphNode = {
-  id: string;
-  role: string;
+type FlowNodeData = {
+  address: string;
+  addressLabels: AddressLabels;
+  explorerBaseUrl: string;
   width: number;
-  x: number;
-  y: number;
 };
 
-type GraphEdge = {
+type FlowEdgeData = {
+  index: number;
+  metadata: Map<string, TokenMetadata>;
   transfer: ERC20Transfer;
-  from: GraphNode;
-  to: GraphNode;
 };
 
-type GraphModel = {
-  edges: GraphEdge[];
-  height: number;
-  nodes: GraphNode[];
-  width: number;
+type FlowNode = Node<FlowNodeData, "address">;
+type FlowEdge = Edge<FlowEdgeData, "transfer">;
+
+const nodeTypes = {
+  address: AddressNode
+};
+
+const edgeTypes = {
+  transfer: TransferEdge
 };
 
 export default function FundFlowGraph(props: {
@@ -40,8 +58,11 @@ export default function FundFlowGraph(props: {
 }) {
   const graphRef = useRef<HTMLDivElement | null>(null);
   const containerWidth = useElementWidth(graphRef);
-  const graph = useMemo(() => buildGraph(props.transfers, containerWidth), [containerWidth, props.transfers]);
   const tokenMetadata = useMemo(() => buildTokenMetadata(props.transfers, props.analysis), [props.analysis, props.transfers]);
+  const graph = useMemo(
+    () => buildGraph(props.transfers, tokenMetadata, props.addressLabels, props.explorerBaseUrl, containerWidth),
+    [containerWidth, props.addressLabels, props.explorerBaseUrl, props.transfers, tokenMetadata]
+  );
 
   if (props.transfers.length === 0) {
     return <div className="flow-graph empty-state">No transfers</div>;
@@ -49,74 +70,128 @@ export default function FundFlowGraph(props: {
 
   return (
     <div className="flow-graph" ref={graphRef}>
-      <svg className="flow-svg" style={{ height: graph.height }} viewBox={`0 0 ${graph.width} ${graph.height}`} role="img" aria-label="Fund flow graph">
-        <defs>
-          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" />
-          </marker>
-        </defs>
-        {graph.edges.map((edge, index) => (
-          <GraphEdgeView edge={edge} index={index} key={`${edge.from.id}-${edge.to.id}-${edge.transfer.token}-${index}`} metadata={tokenMetadata} />
-        ))}
-        {graph.nodes.map((node) => (
-          <GraphNodeView addressLabels={props.addressLabels} explorerBaseUrl={props.explorerBaseUrl} key={node.id} node={node} />
-        ))}
-      </svg>
+      <div className="flow-canvas" role="img" aria-label="Fund flow graph" style={{ height: graph.height }}>
+        <ReactFlow
+          className="flow-svg"
+          nodes={graph.nodes}
+          edges={graph.edges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          fitView
+          fitViewOptions={{ padding: 0.16 }}
+          minZoom={0.45}
+          maxZoom={1.4}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
+          panOnDrag
+          panOnScroll
+          preventScrolling={false}
+        >
+          <Background gap={24} size={1} />
+          <Controls showInteractive={false} />
+        </ReactFlow>
+      </div>
       <EdgeList addressLabels={props.addressLabels} explorerBaseUrl={props.explorerBaseUrl} metadata={tokenMetadata} transfers={props.transfers} />
     </div>
   );
 }
 
-function GraphEdgeView(props: { edge: GraphEdge; index: number; metadata: Map<string, TokenMetadata> }) {
-  const { edge, index, metadata } = props;
-  const centerX = (edge.from.x + edge.to.x) / 2;
-  const centerY = (edge.from.y + edge.to.y) / 2;
-  const token = tokenInfo(edge.transfer.token, metadata);
-  const amount = formatFlowAmount(edge.transfer.normalizedAmount || edge.transfer.amount);
-  const labelY = centerY - 10;
-  const logoX = centerX - 78;
-  const amountX = token.logoUrl ? logoX + 24 : centerX - 78;
+function AddressNode(props: NodeProps<FlowNode>) {
+  const { address, addressLabels, explorerBaseUrl, width } = props.data;
+  const label = labelForAddress(address, addressLabels);
+  const primary = label || displayAddress(address, addressLabels);
+  const addressText = truncateAddress(address);
+  const displayLabel = truncateMiddle(primary, Math.max(8, Math.floor(width / 9)));
+  const href = explorerAddressUrl(explorerBaseUrl, address);
+  const content = (
+    <>
+      <span className="flow-node-label">{displayLabel}</span>
+      {label && <span className="flow-node-address">{addressText}</span>}
+    </>
+  );
   return (
-    <g className="edge">
-      <title>
-        {amount} {token.symbol} [{index + 1}]
-      </title>
-      <path d={edgePath(edge)} />
-      {token.logoUrl && <image className="edge-token-logo" height="18" href={token.logoUrl} width="18" x={logoX} y={labelY - 9} />}
-      <text className="edge-label" x={amountX} y={labelY}>
-        {amount} {token.symbol} <tspan className="edge-index-label">[{index + 1}]</tspan>
-      </text>
-    </g>
+    <div className="flow-node" style={{ width }} title={label ? `${label}\n${address}` : address}>
+      {href ? (
+        <a className="flow-node-link" href={href} rel="noreferrer" target="_blank">
+          {content}
+        </a>
+      ) : (
+        content
+      )}
+    </div>
   );
 }
 
-function buildGraph(transfers: ERC20Transfer[], containerWidth: number): GraphModel {
+function TransferEdge(props: EdgeProps<FlowEdge>) {
+  const [path, labelX, labelY] = getBezierPath(props);
+  if (!props.data) {
+    return <BaseEdge id={props.id} markerEnd={props.markerEnd} path={path} />;
+  }
+
+  const token = tokenInfo(props.data.transfer.token, props.data.metadata);
+  const amount = formatFlowAmount(props.data.transfer.normalizedAmount || props.data.transfer.amount);
+  return (
+    <>
+      <BaseEdge id={props.id} markerEnd={props.markerEnd} path={path} />
+      <EdgeLabelRenderer>
+        <div
+          className="edge-label"
+          style={{
+            transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`
+          }}
+          title={`${amount} ${token.symbol} [${props.data.index + 1}]`}
+        >
+          <TokenLogo logoUrl={token.logoUrl} symbol={token.symbol} />
+          <span>
+            {amount} {token.symbol}
+          </span>
+          <span className="edge-index-label">[{props.data.index + 1}]</span>
+        </div>
+      </EdgeLabelRenderer>
+    </>
+  );
+}
+
+function buildGraph(
+  transfers: ERC20Transfer[],
+  metadata: Map<string, TokenMetadata>,
+  addressLabels: AddressLabels,
+  explorerBaseUrl: string,
+  containerWidth: number
+): { edges: FlowEdge[]; height: number; nodes: FlowNode[] } {
   const userIds = Array.from(new Set(transfers.flatMap((transfer) => [transfer.from, transfer.to])));
   const outgoing = new Set(transfers.map((transfer) => transfer.from));
   const incoming = new Set(transfers.map((transfer) => transfer.to));
   const width = Math.max(560, Math.round(containerWidth || 1100));
-  const height = Math.max(460, userIds.length * 92 + 80);
-
+  const height = Math.max(460, userIds.length * 92 + 120);
   const left = userIds.filter((id) => outgoing.has(id));
   const right = userIds.filter((id) => !outgoing.has(id) || incoming.has(id));
   const center = userIds.filter((id) => !left.includes(id) && !right.includes(id));
   const nodeWidth = graphNodeWidth(Math.max(left.length, right.length, center.length), userIds.length, width);
   const horizontalPadding = width < 720 ? 28 : 64;
-  const leftX = horizontalPadding + nodeWidth / 2;
-  const rightX = width - horizontalPadding - nodeWidth / 2;
-  const centerX = width / 2;
-  const placed = new Map<string, GraphNode>();
-  placeColumn(left, leftX, "sender", nodeWidth, placed);
-  placeColumn(right, rightX, "recipient", nodeWidth, placed);
-  placeColumn(center, centerX, "account", nodeWidth, placed);
+  const leftX = horizontalPadding;
+  const rightX = width - horizontalPadding - nodeWidth;
+  const centerX = width / 2 - nodeWidth / 2;
+  const placed = new Map<string, FlowNode>();
 
-  const nodes = Array.from(placed.values());
-  const edges = transfers.map((transfer) => ({
-    transfer,
-    from: placed.get(transfer.from)!,
-    to: placed.get(transfer.to)!
+  placeColumn(left, leftX, nodeWidth, addressLabels, explorerBaseUrl, placed);
+  placeColumn(right, rightX, nodeWidth, addressLabels, explorerBaseUrl, placed);
+  placeColumn(center, centerX, nodeWidth, addressLabels, explorerBaseUrl, placed);
+
+  const edges: FlowEdge[] = transfers.map((transfer, index) => ({
+    id: `${transfer.from}-${transfer.to}-${transfer.token}-${index}`,
+    source: transfer.from,
+    target: transfer.to,
+    type: "transfer",
+    data: { index, metadata, transfer },
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      color: "#8992a1"
+    }
   }));
-  return { width, height, nodes, edges };
+
+  return { height, nodes: Array.from(placed.values()), edges };
 }
 
 function graphNodeWidth(maxColumnSize: number, totalNodes: number, graphWidth: number): number {
@@ -133,54 +208,26 @@ function graphNodeWidth(maxColumnSize: number, totalNodes: number, graphWidth: n
   return Math.round(Math.min(width, maxForViewport));
 }
 
-function placeColumn(ids: string[], x: number, role: string, width: number, placed: Map<string, GraphNode>) {
+function placeColumn(
+  ids: string[],
+  x: number,
+  width: number,
+  addressLabels: AddressLabels,
+  explorerBaseUrl: string,
+  placed: Map<string, FlowNode>
+) {
   ids.forEach((id, index) => {
     if (!placed.has(id)) {
-      placed.set(id, { id, role, width, x, y: 90 + index * 92 });
+      placed.set(id, {
+        id,
+        type: "address",
+        data: { address: id, addressLabels, explorerBaseUrl, width },
+        position: { x, y: 70 + index * 92 },
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left
+      });
     }
   });
-}
-
-function edgePath(edge: GraphEdge): string {
-  const startX = edge.from.x + edge.from.width / 2 + 6;
-  const endX = edge.to.x - edge.to.width / 2 - 6;
-  if (edge.from.id === edge.to.id) {
-    return `M ${edge.from.x} ${edge.from.y - 24} C ${edge.from.x + 220} ${edge.from.y - 120}, ${edge.to.x + 220} ${edge.to.y + 120}, ${edge.to.x} ${edge.to.y + 24}`;
-  }
-  return `M ${startX} ${edge.from.y} C ${edge.from.x + 250} ${edge.from.y}, ${edge.to.x - 250} ${edge.to.y}, ${endX} ${edge.to.y}`;
-}
-
-function GraphNodeView(props: { addressLabels: AddressLabels; explorerBaseUrl: string; node: GraphNode }) {
-  const label = labelForAddress(props.node.id, props.addressLabels);
-  const primary = label || displayAddress(props.node.id, props.addressLabels);
-  const address = truncateAddress(props.node.id);
-  const displayLabel = truncateMiddle(primary, Math.max(8, Math.floor(props.node.width / 9)));
-  const href = explorerAddressUrl(props.explorerBaseUrl, props.node.id);
-  const content = (
-    <>
-      <title>{label ? `${label}\n${props.node.id}` : props.node.id}</title>
-      <rect width={props.node.width} height="48" rx="7" />
-      <text x={props.node.width / 2} y={label ? "18" : "24"}>
-        {displayLabel}
-      </text>
-      {label && (
-        <text x={props.node.width / 2} y="34" className="node-address">
-          {address}
-        </text>
-      )}
-    </>
-  );
-  return (
-    <g className="node" transform={`translate(${props.node.x - props.node.width / 2}, ${props.node.y - 24})`}>
-      {href ? (
-        <a href={href} rel="noreferrer" target="_blank">
-          {content}
-        </a>
-      ) : (
-        content
-      )}
-    </g>
-  );
 }
 
 function truncateMiddle(value: string, maxLength: number): string {

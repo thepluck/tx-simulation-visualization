@@ -26,6 +26,13 @@ test("uses configured explorer links and renders only the last main call subtree
       })
     });
   });
+  await page.route(`${apiURL}/projects`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ projects: ["~/Kyber/ks-dex-aggregator-sc"] })
+    });
+  });
   await page.route(`${apiURL}/simulate`, async (route) => {
     const request = route.request().postDataJSON() as { etherscanApiKey?: string; labelOverrides?: Array<{ account: string; label: string }> };
     expect(request.labelOverrides).toContainEqual({ account: spender, label: "Sender" });
@@ -46,6 +53,7 @@ test("uses configured explorer links and renders only the last main call subtree
 
   await page.goto("/");
   await expect(page.getByText("online")).toBeVisible();
+  await expect(page.locator("datalist#project-history option[value='~/Kyber/ks-dex-aggregator-sc']")).toHaveCount(1);
   await page.getByLabel("Trace expand depth").fill("1");
 
   await page.getByRole("button", { name: "Browse" }).click();
@@ -75,8 +83,8 @@ test("uses configured explorer links and renders only the last main call subtree
   await expect(page.getByText("success |")).toBeVisible();
 
   await expect(page.getByRole("img", { name: "Fund flow graph" })).toBeVisible();
-  await expect(page.locator(`svg.flow-svg a[href="${explorerURL}/address/${owner}"]`)).toHaveCount(1);
-  await expect(page.locator(`svg.flow-svg a[href="${explorerURL}/address/${recipient}"]`)).toHaveCount(1);
+  await expect(page.locator(`.flow-svg a[href="${explorerURL}/address/${owner}"]`)).toHaveCount(1);
+  await expect(page.locator(`.flow-svg a[href="${explorerURL}/address/${recipient}"]`)).toHaveCount(1);
   await expect(page.locator(`.edge-table a[href="${explorerURL}/address/${owner}"]`)).toHaveCount(50);
   await expect(page.locator(".edge-table tbody tr").nth(0).locator(`a[href="${explorerURL}/address/${owner}"]`)).toHaveText("WETHOwner");
 

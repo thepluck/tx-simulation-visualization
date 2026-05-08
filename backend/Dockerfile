@@ -1,4 +1,4 @@
-FROM golang:1.22-bookworm AS builder
+FROM golang:1.25-bookworm AS builder
 
 WORKDIR /src/backend
 COPY backend/go.mod backend/go.sum ./
@@ -22,8 +22,6 @@ WORKDIR /app
 COPY --from=builder /out/txsim-server /usr/local/bin/txsim-server
 COPY backend/config.docker.yaml ./backend/config.docker.yaml
 COPY contracts ./contracts
-COPY foundry.toml foundry.lock remappings.txt ./
-COPY lib ./lib
 RUN mkdir -p /data/runs
 
 EXPOSE 8080

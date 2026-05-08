@@ -2,11 +2,10 @@
 pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
+import "forge-std/interfaces/IERC20.sol";
+import "forge-std/interfaces/IERC721.sol";
 
-import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
-import "openzeppelin-contracts/contracts/token/ERC721/IERC721.sol";
-
-import "../contracts/SimulateTx.s.sol";
+import "../src/SimulateTx.s.sol";
 
 contract SimulateTxTest is Test {
   address internal constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;

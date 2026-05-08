@@ -8,15 +8,29 @@ type RequestFormProps = {
   error: string;
   form: FormState;
   isRunning: boolean;
+  projectSuggestions: string[];
   requestTab: RequestTab;
   status: HealthStatus;
+  onProjectBrowsed: (path: string) => void;
   onRequestTabChange: (value: RequestTab) => void;
   onSubmit: FormEventHandler<HTMLFormElement>;
   onUpdate: UpdateForm;
 };
 
 export default function RequestForm(props: RequestFormProps) {
-  const { chains, error, form, isRunning, requestTab, status, onRequestTabChange, onSubmit, onUpdate } = props;
+  const {
+    chains,
+    error,
+    form,
+    isRunning,
+    projectSuggestions,
+    requestTab,
+    status,
+    onProjectBrowsed,
+    onRequestTabChange,
+    onSubmit,
+    onUpdate
+  } = props;
   const [browseError, setBrowseError] = useState("");
   const [isBrowsingProject, setIsBrowsingProject] = useState(false);
 
@@ -26,6 +40,7 @@ export default function RequestForm(props: RequestFormProps) {
     try {
       const path = await browseProject(form.apiUrl);
       onUpdate("projectPath", path);
+      onProjectBrowsed(path);
     } catch (err) {
       setBrowseError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -73,10 +88,16 @@ export default function RequestForm(props: RequestFormProps) {
             <input
               className="project-path-input"
               id="foundry-project"
+              list="project-history"
               value={form.projectPath}
-              placeholder="/Users/me/foundry-project"
+              placeholder="~/foundry-project"
               onChange={(event) => onUpdate("projectPath", event.target.value)}
             />
+            <datalist id="project-history">
+              {projectSuggestions.map((path) => (
+                <option key={path} value={path} />
+              ))}
+            </datalist>
             <button className="browse-button" type="button" disabled={isBrowsingProject} onClick={handleBrowseProject}>
               {isBrowsingProject ? "Choosing..." : "Browse"}
             </button>

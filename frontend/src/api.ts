@@ -1,4 +1,4 @@
-import type { ChainConfig, SimulateRequest, SimulateResponse } from "./types";
+import type { ChainConfig, ProjectsResponse, SimulateRequest, SimulateResponse } from "./types";
 
 export async function fetchChainConfig(apiUrl: string): Promise<ChainConfig> {
   const response = await fetch(`${trimSlash(apiUrl)}/chains`);
@@ -15,6 +15,17 @@ export async function fetchChainConfig(apiUrl: string): Promise<ChainConfig> {
 export async function fetchHealth(apiUrl: string): Promise<boolean> {
   const response = await fetch(`${trimSlash(apiUrl)}/health`);
   return response.ok;
+}
+
+export async function fetchProjects(apiUrl: string): Promise<ProjectsResponse> {
+  const response = await fetch(`${trimSlash(apiUrl)}/projects`);
+  if (!response.ok) {
+    throw new Error(`projects request failed: ${response.status}`);
+  }
+  const payload = (await response.json()) as { projects?: string[] };
+  return {
+    projects: payload.projects ?? []
+  };
 }
 
 export async function browseProject(apiUrl: string): Promise<string> {

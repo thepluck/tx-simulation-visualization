@@ -3,6 +3,7 @@ repo_root: "/app"
 project_roots:
   - "${TXSIM_PROJECTS_CONTAINER_PATH}"
 work_dir: "/data/runs"
+project_cache_path: "/data/runs/projects.json"
 timeout_seconds: 120
 max_concurrent_runs: 1
 forge_bin: "forge"

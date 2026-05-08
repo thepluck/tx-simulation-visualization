@@ -38,7 +38,9 @@ TXSIM_LISTEN_ADDR=127.0.0.1:18080 go run ./cmd/server
 
 The server loads config from `TXSIM_CONFIG` when set. Otherwise it searches for `config.yaml`, `backend/config.yaml`, `config.yml`, `backend/config.yml`, then example YAML files.
 
-Use `config.example.yaml` as the starting point. The backend loads `.env` from the repo root and `backend/.env` before expanding RPC values, so requests only need to pass a chain name. `explorer_urls` maps the same chain names to block explorer base URLs for frontend address links. Set `COINGECKO_API_KEY` in `.env` if you want CoinGecko requests to include a demo API key.
+Use `config.example.yaml` as the starting point. The backend loads `.env` from the repo root and `backend/.env` with `gotenv`, then environment variables override config values. Top-level backend settings use `TXSIM_` names such as `TXSIM_LISTEN_ADDR`, `TXSIM_WORK_DIR`, and `TXSIM_MAX_CONCURRENT_RUNS`. Chain endpoints use the existing chain-specific names such as `MAINNET_RPC_URL`, `BASE_RPC_URL`, and `MAINNET_EXPLORER_URL`; requests only need to pass a chain name. `explorer_urls` maps the same chain names to block explorer base URLs for frontend address links. Set `COINGECKO_API_KEY` in `.env` if you want CoinGecko requests to include a demo API key.
+
+`project_cache_path` stores recently used Foundry project paths. Local runs default to `backend/.runs/projects.json`; Docker uses `/data/runs/projects.json`, which is persisted by the `backend-runs` volume.
 
 `max_concurrent_runs` is a channel-backed limiter for Forge executions. Keep it at `1` for the safest local behavior, or raise it if your machine/RPC can handle parallel simulations.
 
@@ -48,12 +50,15 @@ Use `config.example.yaml` as the starting point. The backend loads `.env` from t
 - `GET /openapi.json`
 - `GET /health`
 - `GET /chains`
+- `GET /projects`
 - `GET /browse/project`
 - `POST /simulate`
 
+`GET /projects` returns cached Foundry project paths in most-recent-first order. The frontend uses it for Foundry Project suggestions.
+
 `GET /browse/project` opens a native local folder picker and returns the selected project path. It is intended for the local frontend's Foundry Project browse button.
 
-Inside Docker, native project browsing is unavailable because the backend runs in a Linux container. Type or paste `projectPath` manually. The Compose stack mounts `TXSIM_PROJECTS_HOST_PATH` to `TXSIM_PROJECTS_CONTAINER_PATH`, and the backend can resolve host-style paths against that mounted project root.
+Inside Docker, native project browsing is unavailable because the backend runs in a Linux container. Type or paste `projectPath` manually. The Compose stack mounts `TXSIM_PROJECTS_HOST_PATH` to `TXSIM_PROJECTS_CONTAINER_PATH`, and the backend can resolve host-style paths against that mounted project root. `~` is supported in `projectPath` and configured project roots.
 
 ## Simulate Request
 
@@ -61,7 +66,7 @@ Inside Docker, native project browsing is unavailable because the backend runs i
 {
   "chain": "mainnet",
   "blockNumber": "23000000",
-  "projectPath": "/Users/me/foundry-project",
+  "projectPath": "~/foundry-project",
   "labelOverrides": [
     {
       "account": "0x0000000000000000000000000000000000000000",
@@ -115,7 +120,7 @@ Inside Docker, native project browsing is unavailable because the backend runs i
 
 `chain` becomes `--rpc-url <configured-url>` and `blockNumber` becomes `--fork-block-number <block>`. They are not part of the Solidity script signature.
 
-`projectPath` is optional. When provided, the backend treats it as another Foundry project, runs `forge build src --root <projectPath>`, copies `contracts/SimulateTx.s.sol` into a temporary file under `<projectPath>/script/`, runs `forge script` against that copied script with `--root <projectPath>`, then removes the temporary script file. Relative paths are resolved against the backend repo root.
+`projectPath` is optional. When provided, the backend treats it as another Foundry project, runs `forge build src --root <projectPath>`, copies `contracts/src/SimulateTx.s.sol` into a temporary file under `<projectPath>/script/`, runs `forge script` against that copied script with `--root <projectPath>`, then removes the temporary script file. Relative paths are resolved against the backend repo root. Paths beginning with `~` are expanded to the backend process user's home directory before validation.
 
 `compiler` is optional and maps to popular Forge compiler flags. Supported fields are `use`, `offline`, `noAutoDetect`, `viaIR`, `useLiteralContent`, `noMetadata`, `evmVersion`, `optimize`, `optimizerRuns`, and `revertStrings`. The state override `forge inspect` compile and final `forge script` run default `viaIR` and `optimize` to `true`; external-project `forge build src` uses the target project's defaults unless compiler fields are explicitly set.
 

@@ -548,79 +548,101 @@ button:focus-visible {
   padding: 12px;
 }
 
-.flow-svg {
+.flow-canvas {
   width: 100%;
-  height: 460px;
-  display: block;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #fbfcfd;
+  overflow: hidden;
 }
 
-.node rect {
-  fill: #ffffff;
-  stroke: var(--border);
-  stroke-width: 1.2;
+.flow-svg {
+  width: 100%;
+  height: 100%;
 }
 
-.node a {
-  cursor: pointer;
+.flow-svg .react-flow__node {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
 }
 
-.node a:hover rect,
-.node a:focus rect {
-  stroke: var(--blue);
-}
-
-.node text {
-  fill: var(--text);
+.flow-node {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.2px solid var(--border);
+  border-radius: 7px;
+  background: #ffffff;
+  color: var(--text);
   font-size: 12px;
   font-weight: 700;
-  dominant-baseline: central;
-  text-anchor: middle;
+  text-align: center;
 }
 
-.node .node-address {
-  fill: var(--muted);
+.flow-node-link {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  text-decoration: none;
+}
+
+.flow-node:hover,
+.flow-node:focus-within {
+  border-color: var(--blue);
+}
+
+.flow-node-label {
+  display: block;
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-node-address {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
   font-size: 11px;
   font-weight: 650;
 }
 
-.edge path {
-  fill: none;
+.flow-svg .react-flow__edge-path {
   stroke: var(--line);
   stroke-width: 2;
-  marker-end: url("#arrow");
 }
 
-.edge circle {
-  fill: var(--blue);
-  stroke: #ffffff;
-  stroke-width: 2;
-}
-
-.edge text {
-  fill: white;
-  font-size: 11px;
-  font-weight: 800;
-  text-anchor: middle;
-  dominant-baseline: central;
-}
-
-.edge .edge-label {
-  fill: var(--muted);
+.edge-label {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(224, 229, 236, 0.9);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--muted);
   font-size: 11px;
   font-weight: 700;
-  text-anchor: start;
+  padding: 3px 7px 3px 5px;
+  pointer-events: all;
+  white-space: nowrap;
 }
 
-.edge .edge-index-label {
+.edge-index-label {
   fill: var(--blue);
+  color: var(--blue);
   font-weight: 900;
 }
 
-.edge-token-logo {
-  clip-path: circle(9px at 9px 9px);
+.react-flow__attribution {
+  display: none;
 }
 
 .edge-table {

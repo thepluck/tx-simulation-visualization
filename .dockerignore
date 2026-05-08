@@ -5,6 +5,10 @@ backend/.runs
 cache
 out
 broadcast
+contracts/cache
+contracts/out
+contracts/broadcast
+contracts/.txsim
 docs
 frontend/.vite
 frontend/dist

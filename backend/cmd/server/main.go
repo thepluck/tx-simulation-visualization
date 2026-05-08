@@ -1,8 +1,9 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"tx-simulation-visualization/backend/internal/config"
@@ -12,7 +13,8 @@ import (
 func main() {
 	cfg, configPath, err := config.Load()
 	if err != nil {
-		log.Fatalf("load config: %v", err)
+		slog.Error("load config", "error", err)
+		os.Exit(1)
 	}
 
 	server := httpapi.NewServer(cfg, configPath)
@@ -22,7 +24,10 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	log.Printf("tx simulation backend listening on http://%s", cfg.ListenAddr)
-	log.Printf("config: %s", configPath)
-	log.Fatal(httpServer.ListenAndServe())
+	slog.Info("tx simulation backend listening", "url", "http://"+cfg.ListenAddr)
+	slog.Info("config loaded", "path", configPath)
+	if err := httpServer.ListenAndServe(); err != nil {
+		slog.Error("server stopped", "error", err)
+		os.Exit(1)
+	}
 }

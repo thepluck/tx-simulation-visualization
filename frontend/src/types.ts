@@ -46,6 +46,10 @@ export type ChainConfig = {
   explorerUrls: Record<string, string>;
 };
 
+export type ProjectsResponse = {
+  projects: string[];
+};
+
 export type SimulateRequest = {
   chain: string;
   blockNumber: string;

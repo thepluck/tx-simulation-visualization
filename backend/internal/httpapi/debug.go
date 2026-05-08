@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -32,18 +32,18 @@ func debugHTTP(next http.Handler) http.Handler {
 			requestBody, _ = io.ReadAll(r.Body)
 			r.Body = io.NopCloser(bytes.NewReader(requestBody))
 		}
-		log.Printf("http request method=%s path=%s body=%s", r.Method, r.URL.RequestURI(), logBody(requestBody))
+		slog.Info("http request", "method", r.Method, "path", r.URL.RequestURI(), "body", logBody(requestBody))
 
 		recorder := &debugResponseWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(recorder, r)
 
-		log.Printf(
-			"http response method=%s path=%s status=%d duration=%s body=%s",
-			r.Method,
-			r.URL.RequestURI(),
-			recorder.status,
-			time.Since(start),
-			logBody(recorder.body.Bytes()),
+		slog.Info(
+			"http response",
+			"method", r.Method,
+			"path", r.URL.RequestURI(),
+			"status", recorder.status,
+			"duration", time.Since(start),
+			"body", logBody(recorder.body.Bytes()),
 		)
 	})
 }
