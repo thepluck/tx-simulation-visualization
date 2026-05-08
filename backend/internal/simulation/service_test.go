@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"tx-simulation-visualization/backend/internal/config"
+	"tx-simulation-visualization/backend/internal/forge"
+	"tx-simulation-visualization/backend/internal/fundflow"
 	"tx-simulation-visualization/backend/internal/model"
 )
 
@@ -67,7 +69,7 @@ func TestSimulateWETHBalanceApprovalAndTransferFrom(t *testing.T) {
 		Data:   transferFromCalldata(owner, recipient, mustBigInt(t, amount)),
 	}
 
-	resp, status := NewService(cfg).Simulate(context.Background(), req)
+	resp, status := newTestService(cfg).Simulate(context.Background(), req)
 	t.Cleanup(func() {
 		if resp.RunDir != "" {
 			_ = os.RemoveAll(resp.RunDir)
@@ -85,6 +87,8 @@ func TestSimulateWETHBalanceApprovalAndTransferFrom(t *testing.T) {
 			t.Fatalf("expected label %q in trace, got:\n%s", want, resp.Trace)
 		}
 	}
+	requireERC20Transfer(t, resp, amount, owner, recipient)
+	requireBalanceAnalysis(t, resp, amount, "-2000", "2000")
 }
 
 func TestSimulateStateOverrideContractDealsWETHBalanceAndApproval(t *testing.T) {
@@ -108,7 +112,7 @@ func TestSimulateStateOverrideContractDealsWETHBalanceAndApproval(t *testing.T) 
 		Data:   transferFromCalldata(owner, recipient, mustBigInt(t, amount)),
 	}
 
-	resp, status := NewService(cfg).Simulate(context.Background(), req)
+	resp, status := newTestService(cfg).Simulate(context.Background(), req)
 	t.Cleanup(func() {
 		if resp.RunDir != "" {
 			_ = os.RemoveAll(resp.RunDir)
@@ -150,7 +154,7 @@ func TestSimulateNFTApprovalAndTransferFrom(t *testing.T) {
 		Data:   transferFromCalldata(owner, recipient, mustBigInt(t, baycTokenID)),
 	}
 
-	resp, status := NewService(cfg).Simulate(context.Background(), req)
+	resp, status := newTestService(cfg).Simulate(context.Background(), req)
 	t.Cleanup(func() {
 		if resp.RunDir != "" {
 			_ = os.RemoveAll(resp.RunDir)
@@ -162,6 +166,95 @@ func TestSimulateNFTApprovalAndTransferFrom(t *testing.T) {
 	requireStructuredTrace(t, resp)
 	if !strings.Contains(resp.Trace, "transferFrom") {
 		t.Fatalf("expected transferFrom in trace, got:\n%s", resp.Trace)
+	}
+	if len(resp.ERC20Transfers) != 0 {
+		t.Fatalf("expected no ERC20 transfers for NFT transfer, got %#v", resp.ERC20Transfers)
+	}
+}
+
+func TestSimulateExternalProjectBuildsSrcCompilesOverrideAndRunsCopiedScript(t *testing.T) {
+	repoRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoRoot, "contracts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	scriptSource := []byte("// SPDX-License-Identifier: UNLICENSED\npragma solidity ^0.8.0;\ncontract SimulateTxScript {}\n")
+	if err := os.WriteFile(filepath.Join(repoRoot, "contracts", "SimulateTx.s.sol"), scriptSource, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	projectRoot := t.TempDir()
+	cfg := config.Config{
+		ListenAddr:     "127.0.0.1:0",
+		RepoRoot:       repoRoot,
+		WorkDir:        filepath.Join(t.TempDir(), "runs"),
+		TimeoutSeconds: 30,
+		MaxConcurrent:  1,
+		ForgeBin:       "forge",
+		RPCURLs: map[string]string{
+			"mainnet": "http://127.0.0.1:8545",
+		},
+	}
+	fake := &fakeForgeRunner{
+		results: []forge.Result{
+			{Stdout: "build ok\n"},
+			{Stdout: "0x6000\n"},
+			{Stdout: "Traces:\n  [1] SimulateTxScript::run()\n"},
+		},
+	}
+	service := NewService(cfg)
+	service.forge = fake
+
+	resp, status := service.Simulate(context.Background(), model.SimulateRequest{
+		Chain:       "mainnet",
+		BlockNumber: "1",
+		ProjectPath: projectRoot,
+		StateOverride: &model.StateOverride{
+			ContractName: "OverrideState",
+			Source:       "pragma solidity ^0.8.0; contract OverrideState {}",
+		},
+		Sender: "0x0000000000000000000000000000000000000001",
+		Target: "0x0000000000000000000000000000000000000002",
+		Data:   "0x",
+	})
+
+	if status != http.StatusOK || !resp.Success {
+		t.Fatalf("simulation failed: status=%d resp=%#v", status, resp)
+	}
+	if len(fake.calls) != 3 {
+		t.Fatalf("forge call count = %d, want 3: %#v", len(fake.calls), fake.calls)
+	}
+
+	buildArgs := fake.calls[0]
+	if !hasArgSequence(buildArgs, "build", "src") || !hasArgSequence(buildArgs, "--root", projectRoot) {
+		t.Fatalf("unexpected build args: %#v", buildArgs)
+	}
+	if containsArg(buildArgs, "--via-ir") {
+		t.Fatalf("build should use target project defaults unless request compiler fields are set: %#v", buildArgs)
+	}
+
+	inspectArgs := fake.calls[1]
+	if !hasArgSequence(inspectArgs, "inspect") ||
+		!strings.HasPrefix(inspectArgs[1], "script/TxSimulationStateOverride_") ||
+		!strings.HasSuffix(inspectArgs[1], ".sol:OverrideState") ||
+		!hasArgSequence(inspectArgs, "--root", projectRoot) {
+		t.Fatalf("unexpected inspect args: %#v", inspectArgs)
+	}
+
+	scriptArgs := fake.calls[2]
+	if !hasArgSequence(scriptArgs, "script") ||
+		!strings.HasPrefix(scriptArgs[1], "script/TxSimulation_") ||
+		!strings.HasSuffix(scriptArgs[1], ".s.sol:SimulateTxScript") ||
+		!hasArgSequence(scriptArgs, "--root", projectRoot) ||
+		!containsArg(scriptArgs, "0x6000") {
+		t.Fatalf("unexpected script args: %#v", scriptArgs)
+	}
+
+	entries, err := os.ReadDir(filepath.Join(projectRoot, "script"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("temporary script files were not cleaned up: %#v", entries)
 	}
 }
 
@@ -181,7 +274,7 @@ func loadTestConfig(t *testing.T) config.Config {
 	t.Helper()
 
 	oldConfigPath, hadConfigPath := os.LookupEnv("TXSIM_CONFIG")
-	configPath := filepath.Clean(filepath.Join("..", "..", "config.example.json"))
+	configPath := filepath.Clean(filepath.Join("..", "..", "config.example.yaml"))
 	if err := os.Setenv("TXSIM_CONFIG", configPath); err != nil {
 		t.Fatal(err)
 	}
@@ -228,6 +321,56 @@ func requireStructuredTrace(t *testing.T, resp model.SimulateResponse) {
 	}
 	if resp.StructuredTrace[0].Kind != "call" {
 		t.Fatalf("expected root call node, got %#v", resp.StructuredTrace[0])
+	}
+}
+
+func requireERC20Transfer(t *testing.T, resp model.SimulateResponse, amount string, fromNeedle string, toNeedle string) {
+	t.Helper()
+
+	for _, transfer := range resp.ERC20Transfers {
+		if transfer.Amount == amount && strings.Contains(transfer.From, fromNeedle) && strings.Contains(transfer.To, toNeedle) {
+			if strings.TrimSpace(transfer.Token) == "" {
+				t.Fatalf("expected transfer token: %#v", transfer)
+			}
+			return
+		}
+	}
+	t.Fatalf("expected ERC20 transfer amount=%s from~%s to~%s in %#v", amount, fromNeedle, toNeedle, resp.ERC20Transfers)
+}
+
+func requireBalanceAnalysis(t *testing.T, resp model.SimulateResponse, rawAmount string, ownerUSD string, recipientUSD string) {
+	t.Helper()
+
+	if resp.BalanceAnalysis == nil {
+		t.Fatal("expected balance analysis")
+	}
+	if len(resp.BalanceAnalysis.Changes) != 2 {
+		t.Fatalf("balance changes = %#v, want 2", resp.BalanceAnalysis.Changes)
+	}
+	for _, change := range resp.BalanceAnalysis.Changes {
+		if change.RawAmount != rawAmount && change.RawAmount != "-"+rawAmount {
+			t.Fatalf("unexpected raw amount in change: %#v", change)
+		}
+		if change.USDValue == nil {
+			t.Fatalf("expected USD value in change: %#v", change)
+		}
+	}
+
+	wantTotals := map[string]string{
+		"0x0000000000000000000000000000000000000001": ownerUSD,
+		"0x0000000000000000000000000000000000000003": recipientUSD,
+	}
+	for _, total := range resp.BalanceAnalysis.UserTotals {
+		if want, ok := wantTotals[total.User]; ok {
+			got := fmt.Sprintf("%.0f", total.USDValue)
+			if got != want {
+				t.Fatalf("user %s usd total = %s, want %s", total.User, got, want)
+			}
+			delete(wantTotals, total.User)
+		}
+	}
+	if len(wantTotals) != 0 {
+		t.Fatalf("missing user USD totals: %#v in %#v", wantTotals, resp.BalanceAnalysis.UserTotals)
 	}
 }
 
@@ -364,6 +507,71 @@ func boolPtr(value bool) *bool {
 
 func uint32Ptr(value uint32) *uint32 {
 	return &value
+}
+
+type fakeForgeRunner struct {
+	calls   [][]string
+	results []forge.Result
+}
+
+func (f *fakeForgeRunner) Run(_ context.Context, args ...string) forge.Result {
+	copiedArgs := append([]string(nil), args...)
+	f.calls = append(f.calls, copiedArgs)
+	if len(f.results) == 0 {
+		return forge.Result{}
+	}
+	result := f.results[0]
+	f.results = f.results[1:]
+	return result
+}
+
+type fakePriceProvider struct {
+	prices map[string]fundflow.TokenPrice
+}
+
+func (f fakePriceProvider) Fetch(_ context.Context, _ string, _ []string) (map[string]fundflow.TokenPrice, error) {
+	return f.prices, nil
+}
+
+func newTestService(cfg config.Config) *Service {
+	service := NewService(cfg)
+	service.prices = fakePriceProvider{
+		prices: map[string]fundflow.TokenPrice{
+			strings.ToLower(wethAddress): {
+				PriceUSD: 2000,
+				Decimals: 18,
+			},
+		},
+	}
+	return service
+}
+
+func hasArgSequence(args []string, want ...string) bool {
+	if len(want) == 0 || len(want) > len(args) {
+		return false
+	}
+	for i := 0; i <= len(args)-len(want); i++ {
+		matched := true
+		for j := range want {
+			if args[i+j] != want[j] {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
+}
+
+func containsArg(args []string, want string) bool {
+	for _, arg := range args {
+		if arg == want {
+			return true
+		}
+	}
+	return false
 }
 
 func mustBigInt(t *testing.T, value string) *big.Int {

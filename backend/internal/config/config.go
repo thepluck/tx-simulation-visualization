@@ -2,32 +2,38 @@ package config
 
 import (
 	"bufio"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	ListenAddr     string            `json:"listen_addr"`
-	RepoRoot       string            `json:"repo_root"`
-	WorkDir        string            `json:"work_dir"`
-	TimeoutSeconds int               `json:"timeout_seconds"`
-	MaxConcurrent  int               `json:"max_concurrent_runs"`
-	ForgeBin       string            `json:"forge_bin"`
-	RPCURLs        map[string]string `json:"rpc_urls"`
+	ListenAddr     string            `yaml:"listen_addr"`
+	RepoRoot       string            `yaml:"repo_root"`
+	WorkDir        string            `yaml:"work_dir"`
+	TimeoutSeconds int               `yaml:"timeout_seconds"`
+	MaxConcurrent  int               `yaml:"max_concurrent_runs"`
+	ForgeBin       string            `yaml:"forge_bin"`
+	RPCURLs        map[string]string `yaml:"rpc_urls"`
+	ExplorerURLs   map[string]string `yaml:"explorer_urls"`
 }
 
 func Load() (Config, string, error) {
 	path := os.Getenv("TXSIM_CONFIG")
 	if path == "" {
 		for _, candidate := range []string{
-			"config.json",
-			"backend/config.json",
-			"config.example.json",
-			"backend/config.example.json",
+			"config.yaml",
+			"backend/config.yaml",
+			"config.yml",
+			"backend/config.yml",
+			"config.example.yaml",
+			"backend/config.example.yaml",
+			"config.example.yml",
+			"backend/config.example.yml",
 		} {
 			if _, err := os.Stat(candidate); err == nil {
 				path = candidate
@@ -36,7 +42,7 @@ func Load() (Config, string, error) {
 		}
 	}
 	if path == "" {
-		return Config{}, "", errors.New("set TXSIM_CONFIG or create backend/config.json")
+		return Config{}, "", errors.New("set TXSIM_CONFIG or create backend/config.yaml")
 	}
 
 	data, err := os.ReadFile(path)
@@ -45,7 +51,7 @@ func Load() (Config, string, error) {
 	}
 
 	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return Config{}, "", err
 	}
 
@@ -103,6 +109,12 @@ func Load() (Config, string, error) {
 	}
 	for chain, rpcURL := range cfg.RPCURLs {
 		cfg.RPCURLs[chain] = os.ExpandEnv(rpcURL)
+	}
+	if cfg.ExplorerURLs == nil {
+		cfg.ExplorerURLs = map[string]string{}
+	}
+	for chain, explorerURL := range cfg.ExplorerURLs {
+		cfg.ExplorerURLs[chain] = strings.TrimRight(os.ExpandEnv(explorerURL), "/")
 	}
 
 	return cfg, configPath, nil

@@ -104,14 +104,24 @@ func openAPISpec() map[string]any {
 							"type":  "array",
 							"items": map[string]any{"type": "string"},
 						},
+						"explorerUrls": map[string]any{
+							"type":                 "object",
+							"description":          "Map of configured chain name to block explorer base URL.",
+							"additionalProperties": map[string]any{"type": "string", "format": "uri"},
+						},
 					},
 				},
 				"SimulateRequest": map[string]any{
 					"type":     "object",
 					"required": []string{"chain", "blockNumber", "sender", "target", "data"},
 					"properties": map[string]any{
-						"chain":                  map[string]any{"type": "string", "example": "mainnet"},
-						"blockNumber":            uintStringSchema("23000000"),
+						"chain":       map[string]any{"type": "string", "example": "mainnet"},
+						"blockNumber": uintStringSchema("23000000"),
+						"projectPath": map[string]any{
+							"type":        "string",
+							"description": "Optional Foundry project root. When set, the backend runs `forge build src`, copies the simulation script under this project's script folder, and runs forge script with this root.",
+							"example":     "/Users/me/project",
+						},
 						"labelOverrides":         arraySchema("#/components/schemas/LabelOverride"),
 						"erc20BalanceOverrides":  arraySchema("#/components/schemas/ERC20BalanceOverride"),
 						"erc20ApprovalOverrides": arraySchema("#/components/schemas/ERC20ApprovalOverride"),
@@ -239,7 +249,59 @@ func openAPISpec() map[string]any {
 							"type":  "array",
 							"items": map[string]any{"$ref": "#/components/schemas/TraceNode"},
 						},
-						"error": map[string]any{"type": "string"},
+						"erc20Transfers": map[string]any{
+							"type":  "array",
+							"items": map[string]any{"$ref": "#/components/schemas/ERC20Transfer"},
+						},
+						"balanceAnalysis": map[string]any{"$ref": "#/components/schemas/BalanceAnalysis"},
+						"error":           map[string]any{"type": "string"},
+					},
+				},
+				"ERC20Transfer": map[string]any{
+					"type":     "object",
+					"required": []string{"token", "from", "to", "amount"},
+					"properties": map[string]any{
+						"token":            map[string]any{"type": "string"},
+						"from":             map[string]any{"type": "string"},
+						"to":               map[string]any{"type": "string"},
+						"amount":           map[string]any{"type": "string"},
+						"normalizedAmount": map[string]any{"type": "string"},
+						"symbol":           map[string]any{"type": "string"},
+						"logoUrl":          map[string]any{"type": "string", "format": "uri"},
+					},
+				},
+				"BalanceAnalysis": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"changes": map[string]any{
+							"type":  "array",
+							"items": map[string]any{"$ref": "#/components/schemas/TokenBalanceChange"},
+						},
+						"userTotals": map[string]any{
+							"type":  "array",
+							"items": map[string]any{"$ref": "#/components/schemas/UserUSDChange"},
+						},
+					},
+				},
+				"TokenBalanceChange": map[string]any{
+					"type":     "object",
+					"required": []string{"user", "token", "rawAmount", "amount"},
+					"properties": map[string]any{
+						"user":      map[string]any{"type": "string"},
+						"token":     map[string]any{"type": "string"},
+						"symbol":    map[string]any{"type": "string"},
+						"logoUrl":   map[string]any{"type": "string", "format": "uri"},
+						"rawAmount": map[string]any{"type": "string"},
+						"amount":    map[string]any{"type": "string"},
+						"usdValue":  map[string]any{"type": "number"},
+					},
+				},
+				"UserUSDChange": map[string]any{
+					"type":     "object",
+					"required": []string{"user", "usdValue"},
+					"properties": map[string]any{
+						"user":     map[string]any{"type": "string"},
+						"usdValue": map[string]any{"type": "number"},
 					},
 				},
 				"TraceNode": map[string]any{

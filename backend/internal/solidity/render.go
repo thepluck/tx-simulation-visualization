@@ -31,7 +31,20 @@ func ForgeRunArgs(req model.SimulateRequest, stateBytecode string) []string {
 }
 
 func ForgeCompilerArgs(config *model.CompilerConfig) []string {
-	config = effectiveCompilerConfig(config)
+	return forgeCompilerArgs(config, true)
+}
+
+func ForgeCompilerArgsExplicit(config *model.CompilerConfig) []string {
+	return forgeCompilerArgs(config, false)
+}
+
+func forgeCompilerArgs(config *model.CompilerConfig, useDefaults bool) []string {
+	if useDefaults {
+		config = effectiveCompilerConfig(config)
+	}
+	if config == nil {
+		return nil
+	}
 
 	args := make([]string, 0, 16)
 	if config.NoAutoDetect {

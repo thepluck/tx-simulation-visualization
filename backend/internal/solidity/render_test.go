@@ -47,3 +47,11 @@ func TestForgeCompilerArgsUsesRequestConfig(t *testing.T) {
 		t.Fatalf("ForgeCompilerArgs(custom) = %#v, want %#v", got, want)
 	}
 }
+
+func TestForgeCompilerArgsExplicitDoesNotApplyDefaults(t *testing.T) {
+	got := ForgeCompilerArgsExplicit(&model.CompilerConfig{EVMVersion: "paris"})
+	want := []string{"--evm-version", "paris"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ForgeCompilerArgsExplicit(custom) = %#v, want %#v", got, want)
+	}
+}

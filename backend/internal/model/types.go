@@ -10,6 +10,7 @@ import (
 type SimulateRequest struct {
 	Chain                   string                   `json:"chain"`
 	BlockNumber             Uint256                  `json:"blockNumber"`
+	ProjectPath             string                   `json:"projectPath"`
 	LabelOverrides          []LabelOverride          `json:"labelOverrides"`
 	ERC20BalanceOverrides   []ERC20BalanceOverride   `json:"erc20BalanceOverrides"`
 	ERC20ApprovalOverrides  []ERC20ApprovalOverride  `json:"erc20ApprovalOverrides"`
@@ -67,21 +68,53 @@ type CompilerConfig struct {
 }
 
 type SimulateResponse struct {
-	ID              string      `json:"id"`
-	Success         bool        `json:"success"`
-	ExitCode        int         `json:"exitCode"`
-	DurationMillis  int64       `json:"durationMillis"`
-	Trace           string      `json:"trace"`
-	StructuredTrace []TraceNode `json:"structuredTrace,omitempty"`
-	Stdout          string      `json:"-"`
-	Stderr          string      `json:"-"`
-	Error           string      `json:"error,omitempty"`
-	RunDir          string      `json:"-"`
-	ScriptPath      string      `json:"-"`
+	ID              string           `json:"id"`
+	Success         bool             `json:"success"`
+	ExitCode        int              `json:"exitCode"`
+	DurationMillis  int64            `json:"durationMillis"`
+	Trace           string           `json:"trace"`
+	StructuredTrace []TraceNode      `json:"structuredTrace,omitempty"`
+	ERC20Transfers  []ERC20Transfer  `json:"erc20Transfers,omitempty"`
+	BalanceAnalysis *BalanceAnalysis `json:"balanceAnalysis,omitempty"`
+	Stdout          string           `json:"-"`
+	Stderr          string           `json:"-"`
+	Error           string           `json:"error,omitempty"`
+	RunDir          string           `json:"-"`
+	ScriptPath      string           `json:"-"`
 }
 
 type ErrorResponse struct {
 	Error string `json:"error"`
+}
+
+type ERC20Transfer struct {
+	Token            string `json:"token"`
+	From             string `json:"from"`
+	To               string `json:"to"`
+	Amount           string `json:"amount"`
+	NormalizedAmount string `json:"normalizedAmount,omitempty"`
+	Symbol           string `json:"symbol,omitempty"`
+	LogoURL          string `json:"logoUrl,omitempty"`
+}
+
+type BalanceAnalysis struct {
+	Changes    []TokenBalanceChange `json:"changes,omitempty"`
+	UserTotals []UserUSDChange      `json:"userTotals,omitempty"`
+}
+
+type TokenBalanceChange struct {
+	User      string   `json:"user"`
+	Token     string   `json:"token"`
+	Symbol    string   `json:"symbol,omitempty"`
+	LogoURL   string   `json:"logoUrl,omitempty"`
+	RawAmount string   `json:"rawAmount"`
+	Amount    string   `json:"amount"`
+	USDValue  *float64 `json:"usdValue,omitempty"`
+}
+
+type UserUSDChange struct {
+	User     string  `json:"user"`
+	USDValue float64 `json:"usdValue"`
 }
 
 type TraceNode struct {

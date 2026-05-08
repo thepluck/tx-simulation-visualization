@@ -63,7 +63,10 @@ func (s *Server) handleChains(w http.ResponseWriter, _ *http.Request) {
 		chains = append(chains, chain)
 	}
 	sort.Strings(chains)
-	writeJSON(w, http.StatusOK, map[string]any{"chains": chains})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"chains":       chains,
+		"explorerUrls": s.cfg.ExplorerURLs,
+	})
 }
 
 func (s *Server) handleSimulate(w http.ResponseWriter, r *http.Request) {

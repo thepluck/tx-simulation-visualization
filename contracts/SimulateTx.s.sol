@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.30;
+pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
 
-import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
-import "openzeppelin-contracts/contracts/token/ERC721/IERC721.sol";
-import "openzeppelin-contracts/contracts/utils/Address.sol";
+interface ISimulateTxERC20 {
+  function approve(address spender, uint256 amount) external returns (bool);
+}
+
+interface ISimulateTxERC721 {
+  function approve(address spender, uint256 tokenId) external;
+}
 
 contract SimulateTxScript is Test {
-  using Address for address;
-
   struct LabelOverride {
     address account;
     string label;
@@ -69,21 +71,21 @@ contract SimulateTxScript is Test {
     // override erc20 approvals
     for (uint256 i = 0; i < erc20ApprovalOverrides.length; i++) {
       vm.prank(erc20ApprovalOverrides[i].owner);
-      IERC20(erc20ApprovalOverrides[i].token)
+      ISimulateTxERC20(erc20ApprovalOverrides[i].token)
         .approve(erc20ApprovalOverrides[i].spender, erc20ApprovalOverrides[i].amount);
     }
 
     // override erc721 approvals
     for (uint256 i = 0; i < erc721ApprovalOverrides.length; i++) {
       vm.prank(erc721ApprovalOverrides[i].owner);
-      IERC721(erc721ApprovalOverrides[i].token)
+      ISimulateTxERC721(erc721ApprovalOverrides[i].token)
         .approve(erc721ApprovalOverrides[i].spender, erc721ApprovalOverrides[i].tokenId);
     }
 
     // override additional states
     if (stateOverridingContractBytecode.length > 0) {
       address stateOverridingContract;
-      assembly ("memory-safe") {
+      assembly {
         stateOverridingContract := create(
           0,
           add(stateOverridingContractBytecode, 0x20),
@@ -94,12 +96,24 @@ contract SimulateTxScript is Test {
       if (stateOverridingContract == address(0)) {
         revert("Failed to deploy state overriding contract");
       } else {
-        stateOverridingContract.functionCall("");
+        _callAndBubble(stateOverridingContract, "");
       }
     }
 
     // execute transaction
     vm.prank(sender);
-    target.functionCall(data);
+    _callAndBubble(target, data);
+  }
+
+  function _callAndBubble(address target, bytes memory data) internal {
+    (bool success, bytes memory returndata) = target.call(data);
+    if (!success) {
+      if (returndata.length > 0) {
+        assembly {
+          revert(add(returndata, 0x20), mload(returndata))
+        }
+      }
+      revert("SimulateTxScript: call failed");
+    }
   }
 }

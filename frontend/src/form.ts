@@ -1,0 +1,152 @@
+import type {
+  CompilerConfig,
+  ERC20ApprovalOverride,
+  ERC20BalanceOverride,
+  ERC721ApprovalOverride,
+  LabelOverride,
+  SimulateRequest,
+  StateOverride
+} from "./types";
+
+export type RequestTab = "overrides" | "state" | "compiler";
+export type OutputView = "trace" | "flow" | "balances" | "json";
+export type ExpandMode = "user" | "expand" | "collapse";
+export type HealthStatus = "offline" | "online" | "error";
+
+export type FormState = {
+  apiUrl: string;
+  chain: string;
+  blockNumber: string;
+  projectPath: string;
+  sender: string;
+  target: string;
+  data: string;
+  labelOverrides: LabelOverride[];
+  erc20BalanceOverrides: ERC20BalanceOverride[];
+  erc20ApprovalOverrides: ERC20ApprovalOverride[];
+  erc721ApprovalOverrides: ERC721ApprovalOverride[];
+  stateContractName: string;
+  stateSource: string;
+  compilerUse: string;
+  optimizerRuns: string;
+  evmVersion: string;
+  revertStrings: string;
+  viaIR: boolean;
+  optimize: boolean;
+  offline: boolean;
+  noMetadata: boolean;
+};
+
+export const defaults: FormState = {
+  apiUrl: "http://127.0.0.1:8080",
+  chain: "mainnet",
+  blockNumber: "",
+  projectPath: "",
+  sender: "",
+  target: "",
+  data: "0x",
+  labelOverrides: [],
+  erc20BalanceOverrides: [],
+  erc20ApprovalOverrides: [],
+  erc721ApprovalOverrides: [],
+  stateContractName: "",
+  stateSource: "",
+  compilerUse: "",
+  optimizerRuns: "",
+  evmVersion: "",
+  revertStrings: "",
+  viaIR: true,
+  optimize: true,
+  offline: false,
+  noMetadata: false
+};
+
+export type UpdateForm = <K extends keyof FormState>(key: K, value: FormState[K]) => void;
+
+export function buildRequest(form: FormState): SimulateRequest {
+  if (!form.blockNumber.trim()) {
+    throw new Error("blockNumber is required");
+  }
+  if (!form.sender.trim()) {
+    throw new Error("sender is required");
+  }
+  if (!form.target.trim()) {
+    throw new Error("target is required");
+  }
+
+  const compiler: CompilerConfig = {
+    viaIR: form.viaIR,
+    optimize: form.optimize
+  };
+  optionalString(compiler, "use", form.compilerUse);
+  optionalString(compiler, "evmVersion", form.evmVersion);
+  optionalString(compiler, "revertStrings", form.revertStrings);
+  if (form.offline) {
+    compiler.offline = true;
+  }
+  if (form.noMetadata) {
+    compiler.noMetadata = true;
+  }
+  if (form.optimizerRuns.trim()) {
+    const runs = Number(form.optimizerRuns);
+    if (!Number.isInteger(runs) || runs < 0) {
+      throw new Error("optimizerRuns must be a non-negative integer");
+    }
+    compiler.optimizerRuns = runs;
+  }
+
+  const request: SimulateRequest = {
+    chain: form.chain,
+    blockNumber: form.blockNumber.trim(),
+    sender: form.sender.trim(),
+    target: form.target.trim(),
+    data: form.data.trim() || "0x",
+    labelOverrides: compactRows(form.labelOverrides, ["account", "label"], "Label overrides"),
+    erc20BalanceOverrides: compactRows(form.erc20BalanceOverrides, ["token", "account", "balance"], "ERC20 balance overrides"),
+    erc20ApprovalOverrides: compactRows(form.erc20ApprovalOverrides, ["token", "owner", "spender", "amount"], "ERC20 approval overrides"),
+    erc721ApprovalOverrides: compactRows(form.erc721ApprovalOverrides, ["token", "owner", "spender", "tokenId"], "ERC721 approval overrides"),
+    compiler
+  };
+
+  optionalString(request, "projectPath", form.projectPath);
+  if (form.stateSource.trim()) {
+    const stateOverride: StateOverride = { source: form.stateSource };
+    optionalString(stateOverride, "contractName", form.stateContractName);
+    request.stateOverride = stateOverride;
+  }
+
+  return request;
+}
+
+function optionalString<T, K extends keyof T>(target: T, key: K, value: string) {
+  const trimmed = value.trim();
+  if (trimmed) {
+    target[key] = trimmed as T[K];
+  }
+}
+
+function compactRows<T, K extends keyof T>(rows: T[], fields: K[], label: string): T[] {
+  return rows.flatMap((row, index) => {
+    const normalized = { ...row };
+    const missing: string[] = [];
+    let hasAnyValue = false;
+
+    for (const field of fields) {
+      const value = String(row[field] ?? "").trim();
+      normalized[field] = value as T[K];
+      if (value) {
+        hasAnyValue = true;
+      } else {
+        missing.push(String(field));
+      }
+    }
+
+    if (!hasAnyValue) {
+      return [];
+    }
+    if (missing.length > 0) {
+      throw new Error(`${label} row ${index + 1} missing ${missing.join(", ")}`);
+    }
+    return [normalized];
+  });
+}

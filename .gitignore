@@ -15,4 +15,14 @@ docs/
 
 # Backend local config and generated request artifacts
 backend/config.json
+backend/config.yaml
+backend/config.yml
 backend/.runs/
+
+# Frontend generated artifacts
+frontend/dist/
+frontend/node_modules/
+frontend/.vite/
+frontend/.yarn/
+frontend/playwright-report/
+frontend/test-results/

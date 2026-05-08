@@ -60,6 +60,31 @@ func TestSwaggerUIEndpoint(t *testing.T) {
 	}
 }
 
+func TestChainsEndpointIncludesExplorerURLs(t *testing.T) {
+	server := NewServer(testConfig(t), "")
+	req := httptest.NewRequest(http.MethodGet, "/chains", nil)
+	rec := httptest.NewRecorder()
+
+	server.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	var payload struct {
+		Chains       []string          `json:"chains"`
+		ExplorerURLs map[string]string `json:"explorerUrls"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Chains) != 1 || payload.Chains[0] != "mainnet" {
+		t.Fatalf("unexpected chains: %#v", payload.Chains)
+	}
+	if payload.ExplorerURLs["mainnet"] != "https://etherscan.io" {
+		t.Fatalf("unexpected explorer URLs: %#v", payload.ExplorerURLs)
+	}
+}
+
 func testConfig(t *testing.T) config.Config {
 	t.Helper()
 
@@ -72,6 +97,9 @@ func testConfig(t *testing.T) config.Config {
 		ForgeBin:       "forge",
 		RPCURLs: map[string]string{
 			"mainnet": "http://127.0.0.1:8545",
+		},
+		ExplorerURLs: map[string]string{
+			"mainnet": "https://etherscan.io",
 		},
 	}
 }

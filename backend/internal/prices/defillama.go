@@ -1,0 +1,177 @@
+package prices
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"sort"
+	"strings"
+	"time"
+
+	"tx-simulation-visualization/backend/internal/fundflow"
+
+	"golang.org/x/crypto/sha3"
+)
+
+const defillamaBaseURL = "https://coins.llama.fi/prices/current/"
+
+type DefiLlamaProvider struct {
+	Client  *http.Client
+	BaseURL string
+}
+
+func (p DefiLlamaProvider) Fetch(ctx context.Context, chain string, tokens []string) (map[string]fundflow.TokenPrice, error) {
+	coins := defillamaCoinIDs(chain, tokens)
+	if len(coins) == 0 {
+		return nil, nil
+	}
+
+	client := p.Client
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Second}
+	}
+
+	baseURL := p.BaseURL
+	if baseURL == "" {
+		baseURL = defillamaBaseURL
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+strings.Join(coins, ","), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("defillama price request failed: %s", resp.Status)
+	}
+
+	var payload struct {
+		Coins map[string]struct {
+			Price    float64 `json:"price"`
+			Decimals int     `json:"decimals"`
+			Symbol   string  `json:"symbol"`
+		} `json:"coins"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, err
+	}
+
+	out := make(map[string]fundflow.TokenPrice)
+	for coinID, price := range payload.Coins {
+		if price.Price <= 0 {
+			continue
+		}
+		_, token, ok := strings.Cut(coinID, ":")
+		if !ok {
+			continue
+		}
+		out[strings.ToLower(token)] = fundflow.TokenPrice{
+			PriceUSD: price.Price,
+			Decimals: price.Decimals,
+			Symbol:   strings.TrimSpace(price.Symbol),
+			LogoURL:  trustWalletLogoURL(chain, token),
+		}
+	}
+	return out, nil
+}
+
+func defillamaCoinIDs(chain string, tokens []string) []string {
+	llamaChain := defillamaChain(chain)
+	seen := make(map[string]struct{}, len(tokens))
+	coins := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		token = strings.ToLower(strings.TrimSpace(token))
+		if token == "" {
+			continue
+		}
+		coin := llamaChain + ":" + token
+		if _, ok := seen[coin]; ok {
+			continue
+		}
+		seen[coin] = struct{}{}
+		coins = append(coins, coin)
+	}
+	sort.Strings(coins)
+	return coins
+}
+
+func defillamaChain(chain string) string {
+	switch strings.ToLower(strings.TrimSpace(chain)) {
+	case "mainnet", "eth", "ethereum":
+		return "ethereum"
+	case "arbitrum", "arbitrum-one", "arbitrum_one":
+		return "arbitrum"
+	default:
+		return strings.ToLower(strings.TrimSpace(chain))
+	}
+}
+
+func trustWalletLogoURL(chain string, token string) string {
+	checksum := checksumAddress(token)
+	if checksum == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/%s/assets/%s/logo.png", trustWalletChain(chain), checksum)
+}
+
+func trustWalletChain(chain string) string {
+	switch strings.ToLower(strings.TrimSpace(chain)) {
+	case "mainnet", "eth", "ethereum":
+		return "ethereum"
+	case "arbitrum", "arbitrum-one", "arbitrum_one":
+		return "arbitrum"
+	default:
+		return strings.ToLower(strings.TrimSpace(chain))
+	}
+}
+
+func checksumAddress(value string) string {
+	address := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(value)), "0x")
+	if len(address) != 40 || !isLowerHex(address) {
+		return ""
+	}
+
+	hasher := sha3.NewLegacyKeccak256()
+	_, _ = hasher.Write([]byte(address))
+	hash := hasher.Sum(nil)
+
+	var out strings.Builder
+	out.Grow(42)
+	out.WriteString("0x")
+	for i := 0; i < len(address); i++ {
+		char := address[i]
+		if char >= '0' && char <= '9' {
+			out.WriteByte(char)
+			continue
+		}
+
+		nibble := hash[i/2]
+		if i%2 == 0 {
+			nibble >>= 4
+		} else {
+			nibble &= 0x0f
+		}
+		if nibble >= 8 {
+			out.WriteByte(char - 32)
+		} else {
+			out.WriteByte(char)
+		}
+	}
+	return out.String()
+}
+
+func isLowerHex(value string) bool {
+	for i := 0; i < len(value); i++ {
+		char := value[i]
+		if (char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') {
+			continue
+		}
+		return false
+	}
+	return true
+}
