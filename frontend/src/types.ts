@@ -56,6 +56,7 @@ export type SimulateRequest = {
   erc721ApprovalOverrides?: ERC721ApprovalOverride[];
   stateOverride?: StateOverride;
   compiler?: CompilerConfig;
+  etherscanApiKey?: string;
   sender: string;
   target: string;
   data: string;

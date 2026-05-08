@@ -1,4 +1,5 @@
-import type { FormEventHandler } from "react";
+import { useState, type FormEventHandler } from "react";
+import { browseProject } from "../api";
 import type { FormState, HealthStatus, RequestTab, UpdateForm } from "../form";
 import ScriptOverridesTab from "./ScriptOverridesTab";
 
@@ -16,6 +17,21 @@ type RequestFormProps = {
 
 export default function RequestForm(props: RequestFormProps) {
   const { chains, error, form, isRunning, requestTab, status, onRequestTabChange, onSubmit, onUpdate } = props;
+  const [browseError, setBrowseError] = useState("");
+  const [isBrowsingProject, setIsBrowsingProject] = useState(false);
+
+  const handleBrowseProject = async () => {
+    setBrowseError("");
+    setIsBrowsingProject(true);
+    try {
+      const path = await browseProject(form.apiUrl);
+      onUpdate("projectPath", path);
+    } catch (err) {
+      setBrowseError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsBrowsingProject(false);
+    }
+  };
 
   return (
     <section className="control-panel" aria-label="Simulation request">
@@ -51,14 +67,22 @@ export default function RequestForm(props: RequestFormProps) {
           </label>
         </div>
 
-        <label>
-          Foundry Project
-          <input
-            value={form.projectPath}
-            placeholder="/Users/me/foundry-project"
-            onChange={(event) => onUpdate("projectPath", event.target.value)}
-          />
-        </label>
+        <div className="field-block">
+          <label htmlFor="foundry-project">Foundry Project</label>
+          <span className="browse-field">
+            <input
+              className="project-path-input"
+              id="foundry-project"
+              value={form.projectPath}
+              placeholder="/Users/me/foundry-project"
+              onChange={(event) => onUpdate("projectPath", event.target.value)}
+            />
+            <button className="browse-button" type="button" disabled={isBrowsingProject} onClick={handleBrowseProject}>
+              {isBrowsingProject ? "Choosing..." : "Browse"}
+            </button>
+          </span>
+          {browseError && <span className="field-error">{browseError}</span>}
+        </div>
 
         <label>
           Sender
@@ -161,6 +185,16 @@ function CompilerTab(props: { form: FormState; onUpdate: UpdateForm }) {
           </select>
         </label>
       </div>
+      <label>
+        Etherscan API Key
+        <input
+          autoComplete="off"
+          type="password"
+          value={form.etherscanApiKey}
+          placeholder="ETHERSCAN_API_KEY"
+          onChange={(event) => onUpdate("etherscanApiKey", event.target.value)}
+        />
+      </label>
     </section>
   );
 }

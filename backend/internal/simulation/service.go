@@ -23,6 +23,7 @@ import (
 const (
 	localScriptTarget  = "contracts/SimulateTx.s.sol:SimulateTxScript"
 	scriptContractName = "SimulateTxScript"
+	senderLabel        = "Sender"
 )
 
 type forgeRunner interface {
@@ -153,6 +154,9 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 		"--non-interactive",
 	)
 	forgeArgs = append(forgeArgs, solidity.ForgeCompilerArgs(req.Compiler)...)
+	if req.EtherscanAPIKey != "" {
+		forgeArgs = append(forgeArgs, "--etherscan-api-key", req.EtherscanAPIKey)
+	}
 
 	result := s.forge.Run(ctx, forgeArgs...)
 	resp.DurationMillis = time.Since(start).Milliseconds()
@@ -161,22 +165,22 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 	combined := strings.TrimSpace(resp.Stdout + "\n" + resp.Stderr)
 	resp.Trace = solidity.ExtractTrace(combined)
 	resp.StructuredTrace = traceparser.Parse(resp.Trace)
+	resp.ExitCode = result.ExitCode
+	resp.Success = result.Err == nil
+	if result.Err != nil {
+		return resp, http.StatusOK
+	}
 	resp.ERC20Transfers = fundflow.ExtractERC20Transfers(resp.Trace, resp.StructuredTrace, excludedERC721Tokens(req))
 	priceMap := s.fetchTokenPrices(ctx, req.Chain, resp.ERC20Transfers)
 	resp.ERC20Transfers = fundflow.EnrichERC20Transfers(resp.ERC20Transfers, priceMap)
 	resp.BalanceAnalysis = fundflow.AnalyzeBalanceChanges(resp.ERC20Transfers, priceMap)
-	resp.ExitCode = result.ExitCode
-	resp.Success = result.Err == nil
-	if result.Err != nil {
-		resp.Error = result.Err.Error()
-		return resp, forge.StatusFromCommandError(result.Err)
-	}
 
 	return resp, http.StatusOK
 }
 
 func (s *Service) validateRequest(req *model.SimulateRequest) (string, error) {
 	req.Chain = strings.TrimSpace(req.Chain)
+	req.EtherscanAPIKey = strings.TrimSpace(req.EtherscanAPIKey)
 	if req.Chain == "" {
 		return "", errors.New("chain is required")
 	}
@@ -208,6 +212,7 @@ func (s *Service) validateRequest(req *model.SimulateRequest) (string, error) {
 		return "", err
 	}
 	req.Data = normalizedData
+	ensureSenderLabel(req)
 
 	for i := range req.LabelOverrides {
 		item := &req.LabelOverrides[i]
@@ -269,6 +274,15 @@ func (s *Service) validateRequest(req *model.SimulateRequest) (string, error) {
 	}
 
 	return rpcURL, nil
+}
+
+func ensureSenderLabel(req *model.SimulateRequest) {
+	for _, label := range req.LabelOverrides {
+		if strings.EqualFold(strings.TrimSpace(label.Account), req.Sender) {
+			return
+		}
+	}
+	req.LabelOverrides = append([]model.LabelOverride{{Account: req.Sender, Label: senderLabel}}, req.LabelOverrides...)
 }
 
 func (s *Service) normalizeProjectPath(value string) (string, error) {
@@ -340,7 +354,7 @@ func (s *Service) prepareFoundryExecution(req *model.SimulateRequest, runID stri
 	}
 
 	execution.ScriptPath = scriptPath
-	execution.ScriptTarget = filepath.ToSlash(filepath.Join("script", scriptName)) + ":" + scriptContractName
+	execution.ScriptTarget = filepath.ToSlash(scriptPath) + ":" + scriptContractName
 	execution.tempFiles = append(execution.tempFiles, scriptPath)
 	return execution, nil
 }

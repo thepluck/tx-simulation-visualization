@@ -19,6 +19,7 @@ type SimulateRequest struct {
 	StateOverrideCode       string                   `json:"stateOverrideCode"`
 	StateOverrideContract   string                   `json:"stateOverrideContractName"`
 	Compiler                *CompilerConfig          `json:"compiler"`
+	EtherscanAPIKey         string                   `json:"etherscanApiKey"`
 	Sender                  string                   `json:"sender"`
 	Target                  string                   `json:"target"`
 	Data                    string                   `json:"data"`

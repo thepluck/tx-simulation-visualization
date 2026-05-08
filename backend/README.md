@@ -9,6 +9,13 @@ cd backend
 go run ./cmd/server
 ```
 
+To log HTTP request and response bodies while debugging:
+
+```sh
+cd backend
+TXSIM_DEBUG_HTTP=1 go run ./cmd/server
+```
+
 The server loads config from `TXSIM_CONFIG` when set. Otherwise it searches for `config.yaml`, `backend/config.yaml`, `config.yml`, `backend/config.yml`, then example YAML files.
 
 Use `config.example.yaml` as the starting point. The backend loads `.env` from the repo root and `backend/.env` before expanding RPC values, so requests only need to pass a chain name. `explorer_urls` maps the same chain names to block explorer base URLs for frontend address links.
@@ -21,7 +28,10 @@ Use `config.example.yaml` as the starting point. The backend loads `.env` from t
 - `GET /openapi.json`
 - `GET /health`
 - `GET /chains`
+- `GET /browse/project`
 - `POST /simulate`
+
+`GET /browse/project` opens a native local folder picker and returns the selected project path. It is intended for the local frontend's Foundry Project browse button.
 
 ## Simulate Request
 

@@ -10,7 +10,7 @@ import type {
 
 export type RequestTab = "overrides" | "state" | "compiler";
 export type OutputView = "trace" | "flow" | "balances" | "json";
-export type ExpandMode = "user" | "expand" | "collapse";
+export type ExpandMode = "depth" | "expand" | "collapse";
 export type HealthStatus = "offline" | "online" | "error";
 
 export type FormState = {
@@ -27,6 +27,7 @@ export type FormState = {
   erc721ApprovalOverrides: ERC721ApprovalOverride[];
   stateContractName: string;
   stateSource: string;
+  etherscanApiKey: string;
   compilerUse: string;
   optimizerRuns: string;
   evmVersion: string;
@@ -51,6 +52,7 @@ export const defaults: FormState = {
   erc721ApprovalOverrides: [],
   stateContractName: "",
   stateSource: "",
+  etherscanApiKey: "",
   compilerUse: "",
   optimizerRuns: "",
   evmVersion: "",
@@ -101,7 +103,7 @@ export function buildRequest(form: FormState): SimulateRequest {
     sender: form.sender.trim(),
     target: form.target.trim(),
     data: form.data.trim() || "0x",
-    labelOverrides: compactRows(form.labelOverrides, ["account", "label"], "Label overrides"),
+    labelOverrides: withSenderLabel(form.sender, compactRows(form.labelOverrides, ["account", "label"], "Label overrides")),
     erc20BalanceOverrides: compactRows(form.erc20BalanceOverrides, ["token", "account", "balance"], "ERC20 balance overrides"),
     erc20ApprovalOverrides: compactRows(form.erc20ApprovalOverrides, ["token", "owner", "spender", "amount"], "ERC20 approval overrides"),
     erc721ApprovalOverrides: compactRows(form.erc721ApprovalOverrides, ["token", "owner", "spender", "tokenId"], "ERC721 approval overrides"),
@@ -109,6 +111,7 @@ export function buildRequest(form: FormState): SimulateRequest {
   };
 
   optionalString(request, "projectPath", form.projectPath);
+  optionalString(request, "etherscanApiKey", form.etherscanApiKey);
   if (form.stateSource.trim()) {
     const stateOverride: StateOverride = { source: form.stateSource };
     optionalString(stateOverride, "contractName", form.stateContractName);
@@ -116,6 +119,14 @@ export function buildRequest(form: FormState): SimulateRequest {
   }
 
   return request;
+}
+
+function withSenderLabel(sender: string, labels: LabelOverride[]): LabelOverride[] {
+  const account = sender.trim();
+  if (!account || labels.some((label) => label.account.toLowerCase() === account.toLowerCase())) {
+    return labels;
+  }
+  return [{ account, label: "Sender" }, ...labels];
 }
 
 function optionalString<T, K extends keyof T>(target: T, key: K, value: string) {

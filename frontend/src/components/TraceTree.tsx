@@ -3,10 +3,12 @@ import type { ExpandMode } from "../form";
 import { resolveAddressReference, type AddressLabels } from "../labels";
 import type { TraceNode } from "../types";
 import AddressReference from "./AddressReference";
+import TraceArguments from "./TraceArguments";
 
 type TraceTreeProps = {
   addressLabels: AddressLabels;
   expandMode: ExpandMode;
+  expandDepth: number;
   explorerBaseUrl: string;
   nodes: TraceNode[];
   target: string;
@@ -27,15 +29,24 @@ export default function TraceTree(props: TraceTreeProps) {
           key={`${node.raw}-${index}`}
           node={node}
           expandMode={props.expandMode}
+          expandDepth={props.expandDepth}
+          depth={0}
         />
       ))}
     </div>
   );
 }
 
-function TraceNodeView(props: { addressLabels: AddressLabels; explorerBaseUrl: string; node: TraceNode; expandMode: ExpandMode }) {
+function TraceNodeView(props: {
+  addressLabels: AddressLabels;
+  depth: number;
+  expandDepth: number;
+  explorerBaseUrl: string;
+  node: TraceNode;
+  expandMode: ExpandMode;
+}) {
   const hasChildren = Boolean(props.node.children?.length);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(() => shouldOpenAtDepth(props.depth, props.expandDepth));
 
   useEffect(() => {
     if (props.expandMode === "expand") {
@@ -44,7 +55,10 @@ function TraceNodeView(props: { addressLabels: AddressLabels; explorerBaseUrl: s
     if (props.expandMode === "collapse") {
       setOpen(false);
     }
-  }, [props.expandMode]);
+    if (props.expandMode === "depth") {
+      setOpen(shouldOpenAtDepth(props.depth, props.expandDepth));
+    }
+  }, [props.depth, props.expandDepth, props.expandMode]);
 
   const main = traceLabel(props.node, props.addressLabels, props.explorerBaseUrl);
   const meta = [props.node.callType, props.node.gas ? `${props.node.gas} gas` : ""].filter(Boolean).join(" | ");
@@ -53,7 +67,7 @@ function TraceNodeView(props: { addressLabels: AddressLabels; explorerBaseUrl: s
     return (
       <div className="trace-leaf">
         <span className="trace-kind">{props.node.kind}</span>
-        <span className="trace-main" title={props.node.raw}>
+        <span className="trace-main">
           {main}
         </span>
         <span className="trace-meta">{meta}</span>
@@ -65,7 +79,7 @@ function TraceNodeView(props: { addressLabels: AddressLabels; explorerBaseUrl: s
     <details className="trace-node" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary>
         <span className="trace-kind">{props.node.kind}</span>
-        <span className="trace-main" title={props.node.raw}>
+        <span className="trace-main">
           {main}
         </span>
         <span className="trace-meta">{meta}</span>
@@ -78,6 +92,8 @@ function TraceNodeView(props: { addressLabels: AddressLabels; explorerBaseUrl: s
             key={`${child.raw}-${index}`}
             node={child}
             expandMode={props.expandMode}
+            expandDepth={props.expandDepth}
+            depth={props.depth + 1}
           />
         ))}
       </div>
@@ -88,7 +104,16 @@ function TraceNodeView(props: { addressLabels: AddressLabels; explorerBaseUrl: s
 function traceLabel(node: TraceNode, addressLabels: AddressLabels, explorerBaseUrl: string) {
   if (node.kind === "call") {
     const addressRef = resolveAddressReference(node.target, addressLabels);
-    const suffix = `::${node.function ?? "call"}${node.arguments ? `(${node.arguments})` : ""}`;
+    const suffix = (
+      <>
+        ::{node.function ?? "call"}
+        {node.arguments ? (
+          <>
+            (<TraceArguments value={node.arguments} />)
+          </>
+        ) : null}
+      </>
+    );
     if (addressRef) {
       return (
         <>
@@ -97,12 +122,25 @@ function traceLabel(node: TraceNode, addressLabels: AddressLabels, explorerBaseU
         </>
       );
     }
-    return `${node.target ?? "unknown"}${suffix}`;
+    return (
+      <>
+        {node.target ?? "unknown"}
+        {suffix}
+      </>
+    );
   }
   if (node.kind === "event") {
-    return `emit ${node.value ?? node.raw}`;
+    return withoutEmitPrefix(node.value ?? node.raw);
   }
   return node.value || node.raw;
+}
+
+function withoutEmitPrefix(value: string): string {
+  return value.replace(/^emit\s+/, "");
+}
+
+function shouldOpenAtDepth(depth: number, expandDepth: number): boolean {
+  return depth < expandDepth;
 }
 
 function mainCallTrace(nodes: TraceNode[], target: string, addressLabels: AddressLabels): TraceNode[] {

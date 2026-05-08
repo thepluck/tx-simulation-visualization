@@ -64,6 +64,15 @@ func openAPISpec() map[string]any {
 					},
 				},
 			},
+			"/browse/project": map[string]any{
+				"get": map[string]any{
+					"summary": "Open a local folder picker and return a Foundry project path",
+					"responses": map[string]any{
+						"200": jsonResponse("#/components/schemas/BrowseProjectResponse"),
+						"400": jsonResponse("#/components/schemas/ErrorResponse"),
+					},
+				},
+			},
 			"/simulate": map[string]any{
 				"post": map[string]any{
 					"summary": "Run a Forge script simulation and return raw plus structured trace",
@@ -111,6 +120,17 @@ func openAPISpec() map[string]any {
 						},
 					},
 				},
+				"BrowseProjectResponse": map[string]any{
+					"type":     "object",
+					"required": []string{"path"},
+					"properties": map[string]any{
+						"path": map[string]any{
+							"type":        "string",
+							"description": "Absolute path selected by the local backend folder picker.",
+							"example":     "/Users/me/foundry-project",
+						},
+					},
+				},
 				"SimulateRequest": map[string]any{
 					"type":     "object",
 					"required": []string{"chain", "blockNumber", "sender", "target", "data"},
@@ -132,9 +152,14 @@ func openAPISpec() map[string]any {
 						"stateOverrideCode":         map[string]any{"type": "string", "deprecated": true},
 						"stateOverrideContractName": map[string]any{"type": "string", "deprecated": true},
 						"compiler":                  map[string]any{"$ref": "#/components/schemas/CompilerConfig"},
-						"sender":                    addressSchema("0x0000000000000000000000000000000000000001"),
-						"target":                    addressSchema("0x0000000000000000000000000000000000000002"),
-						"data":                      bytesSchema("0x"),
+						"etherscanApiKey": map[string]any{
+							"type":        "string",
+							"format":      "password",
+							"description": "Optional Etherscan or Etherscan-equivalent API key passed to `forge script --etherscan-api-key`.",
+						},
+						"sender": addressSchema("0x0000000000000000000000000000000000000001"),
+						"target": addressSchema("0x0000000000000000000000000000000000000002"),
+						"data":   bytesSchema("0x"),
 					},
 				},
 				"LabelOverride": map[string]any{

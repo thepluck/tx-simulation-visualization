@@ -7,7 +7,7 @@ export type AddressReference = {
   label?: string;
 };
 
-export function buildAddressLabels(overrides: LabelOverride[]): AddressLabels {
+export function buildAddressLabels(overrides: LabelOverride[], sender?: string): AddressLabels {
   const labels: AddressLabels = new Map();
   for (const override of overrides) {
     const account = override.account.trim().toLowerCase();
@@ -15,6 +15,10 @@ export function buildAddressLabels(overrides: LabelOverride[]): AddressLabels {
     if (account && label) {
       labels.set(account, label);
     }
+  }
+  const senderAddress = (sender ?? "").trim().toLowerCase();
+  if (isAddress(senderAddress) && !labels.has(senderAddress)) {
+    labels.set(senderAddress, "Sender");
   }
   return labels;
 }

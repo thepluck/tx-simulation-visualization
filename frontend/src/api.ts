@@ -17,6 +17,18 @@ export async function fetchHealth(apiUrl: string): Promise<boolean> {
   return response.ok;
 }
 
+export async function browseProject(apiUrl: string): Promise<string> {
+  const response = await fetch(`${trimSlash(apiUrl)}/browse/project`);
+  const payload = (await response.json()) as { error?: string; path?: string };
+  if (!response.ok) {
+    throw new Error(payload.error || `browse project request failed: ${response.status}`);
+  }
+  if (!payload.path) {
+    throw new Error("browse project response missing path");
+  }
+  return payload.path;
+}
+
 export async function simulate(apiUrl: string, request: SimulateRequest): Promise<SimulateResponse> {
   const response = await fetch(`${trimSlash(apiUrl)}/simulate`, {
     method: "POST",

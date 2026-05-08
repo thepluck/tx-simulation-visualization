@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -12,16 +13,18 @@ import (
 )
 
 type Server struct {
-	cfg        config.Config
-	configPath string
-	simulator  *simulation.Service
+	cfg              config.Config
+	configPath       string
+	chooseProjectDir func(context.Context) (string, error)
+	simulator        *simulation.Service
 }
 
 func NewServer(cfg config.Config, configPath string) *Server {
 	return &Server{
-		cfg:        cfg,
-		configPath: configPath,
-		simulator:  simulation.NewService(cfg),
+		cfg:              cfg,
+		configPath:       configPath,
+		chooseProjectDir: chooseProjectDirectory,
+		simulator:        simulation.NewService(cfg),
 	}
 }
 
@@ -32,8 +35,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /openapi.json", s.handleOpenAPI)
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /chains", s.handleChains)
+	mux.HandleFunc("GET /browse/project", s.handleBrowseProject)
 	mux.HandleFunc("POST /simulate", s.handleSimulate)
-	return localCORS(mux)
+	return debugHTTP(localCORS(mux))
 }
 
 func localCORS(next http.Handler) http.Handler {
@@ -67,6 +71,15 @@ func (s *Server) handleChains(w http.ResponseWriter, _ *http.Request) {
 		"chains":       chains,
 		"explorerUrls": s.cfg.ExplorerURLs,
 	})
+}
+
+func (s *Server) handleBrowseProject(w http.ResponseWriter, r *http.Request) {
+	path, err := s.chooseProjectDir(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, model.ErrorResponse{Error: "choose project folder: " + err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"path": path})
 }
 
 func (s *Server) handleSimulate(w http.ResponseWriter, r *http.Request) {

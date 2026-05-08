@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -172,6 +173,88 @@ func TestSimulateNFTApprovalAndTransferFrom(t *testing.T) {
 	}
 }
 
+func TestSimulateReturnsTraceWhenScriptFailsWithoutFundFlow(t *testing.T) {
+	repoRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoRoot, "contracts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	scriptSource := []byte("// SPDX-License-Identifier: UNLICENSED\npragma solidity ^0.8.0;\ncontract SimulateTxScript {}\n")
+	if err := os.WriteFile(filepath.Join(repoRoot, "contracts", "SimulateTx.s.sol"), scriptSource, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.Config{
+		ListenAddr:     "127.0.0.1:0",
+		RepoRoot:       repoRoot,
+		WorkDir:        filepath.Join(t.TempDir(), "runs"),
+		TimeoutSeconds: 30,
+		MaxConcurrent:  1,
+		ForgeBin:       "forge",
+		RPCURLs: map[string]string{
+			"mainnet": "http://127.0.0.1:8545",
+		},
+	}
+	fake := &fakeForgeRunner{
+		results: []forge.Result{
+			{
+				Stdout: `Traces:
+  [1000] SimulateTxScript::run()
+    ├─ [500] WETH9::transfer(0x0000000000000000000000000000000000000003, 1)
+    │   ├─ emit Transfer(from: 0x0000000000000000000000000000000000000001, to: 0x0000000000000000000000000000000000000003, value: 1)
+    │   └─ ← [Revert] ERC20: transfer amount exceeds balance
+    └─ ← [Revert] ERC20: transfer amount exceeds balance
+`,
+				Stderr:   "Error: script failed\n",
+				ExitCode: 1,
+				Err:      errors.New("exit status 1"),
+			},
+		},
+	}
+	service := NewService(cfg)
+	service.forge = fake
+
+	resp, status := service.Simulate(context.Background(), model.SimulateRequest{
+		Chain:       "mainnet",
+		BlockNumber: "1",
+		Sender:      "0x0000000000000000000000000000000000000001",
+		Target:      "0x0000000000000000000000000000000000000002",
+		Data:        "0x",
+	})
+
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; resp=%#v", status, resp)
+	}
+	if resp.Success {
+		t.Fatalf("success = true, want false for failing forge script")
+	}
+	if resp.ExitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", resp.ExitCode)
+	}
+	if resp.Error != "" {
+		t.Fatalf("error = %q, want empty", resp.Error)
+	}
+	requireStructuredTrace(t, resp)
+	if len(resp.ERC20Transfers) != 0 {
+		t.Fatalf("ERC20 transfers should be skipped on script failure: %#v", resp.ERC20Transfers)
+	}
+	if resp.BalanceAnalysis != nil {
+		t.Fatalf("balance analysis should be skipped on script failure: %#v", resp.BalanceAnalysis)
+	}
+	encoded, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"erc20Transfers", "balanceAnalysis", "error"} {
+		if _, ok := payload[field]; ok {
+			t.Fatalf("failed script response should omit %q: %s", field, encoded)
+		}
+	}
+}
+
 func TestSimulateExternalProjectBuildsSrcCompilesOverrideAndRunsCopiedScript(t *testing.T) {
 	repoRoot := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(repoRoot, "contracts"), 0o755); err != nil {
@@ -205,9 +288,10 @@ func TestSimulateExternalProjectBuildsSrcCompilesOverrideAndRunsCopiedScript(t *
 	service.forge = fake
 
 	resp, status := service.Simulate(context.Background(), model.SimulateRequest{
-		Chain:       "mainnet",
-		BlockNumber: "1",
-		ProjectPath: projectRoot,
+		Chain:           "mainnet",
+		BlockNumber:     "1",
+		ProjectPath:     projectRoot,
+		EtherscanAPIKey: "etherscan-test-key",
 		StateOverride: &model.StateOverride{
 			ContractName: "OverrideState",
 			Source:       "pragma solidity ^0.8.0; contract OverrideState {}",
@@ -242,11 +326,16 @@ func TestSimulateExternalProjectBuildsSrcCompilesOverrideAndRunsCopiedScript(t *
 
 	scriptArgs := fake.calls[2]
 	if !hasArgSequence(scriptArgs, "script") ||
-		!strings.HasPrefix(scriptArgs[1], "script/TxSimulation_") ||
+		!filepath.IsAbs(strings.TrimSuffix(scriptArgs[1], ":SimulateTxScript")) ||
+		!strings.HasPrefix(scriptArgs[1], filepath.ToSlash(filepath.Join(projectRoot, "script", "TxSimulation_"))) ||
 		!strings.HasSuffix(scriptArgs[1], ".s.sol:SimulateTxScript") ||
 		!hasArgSequence(scriptArgs, "--root", projectRoot) ||
+		!hasArgSequence(scriptArgs, "--etherscan-api-key", "etherscan-test-key") ||
 		!containsArg(scriptArgs, "0x6000") {
 		t.Fatalf("unexpected script args: %#v", scriptArgs)
+	}
+	if scriptArgs[4] != `[(0x0000000000000000000000000000000000000001,"Sender")]` {
+		t.Fatalf("sender label arg = %q, want default Sender label", scriptArgs[4])
 	}
 
 	entries, err := os.ReadDir(filepath.Join(projectRoot, "script"))

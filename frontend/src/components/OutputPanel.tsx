@@ -8,18 +8,32 @@ import TraceTree from "./TraceTree";
 
 type OutputPanelProps = {
   addressLabels: AddressLabels;
+  expandDepth: number;
   expandMode: ExpandMode;
   explorerBaseUrl: string;
   outputView: OutputView;
   response: SimulateResponse | null;
   runMeta: string;
   target: string;
+  onExpandDepthChange: Dispatch<SetStateAction<number>>;
   onExpandModeChange: Dispatch<SetStateAction<ExpandMode>>;
   onOutputViewChange: Dispatch<SetStateAction<OutputView>>;
 };
 
 export default function OutputPanel(props: OutputPanelProps) {
-  const { addressLabels, expandMode, explorerBaseUrl, outputView, response, runMeta, target, onExpandModeChange, onOutputViewChange } = props;
+  const {
+    addressLabels,
+    expandDepth,
+    expandMode,
+    explorerBaseUrl,
+    outputView,
+    response,
+    runMeta,
+    target,
+    onExpandDepthChange,
+    onExpandModeChange,
+    onOutputViewChange
+  } = props;
   const workspaceRef = useRef<HTMLElement | null>(null);
   const scrollPositionsRef = useRef<Partial<Record<OutputView, number>>>({});
   const pendingScrollTopRef = useRef<number | null>(null);
@@ -70,17 +84,35 @@ export default function OutputPanel(props: OutputPanelProps) {
         <section className="output-view active">
           <div className="section-bar">
             <h3>Transaction Trace</h3>
-            <div className="icon-actions">
-              <button type="button" title="Expand trace" onClick={() => onExpandModeChange("expand")}>
-                +
-              </button>
-              <button type="button" title="Collapse trace" onClick={() => onExpandModeChange("collapse")}>
-                -
-              </button>
+            <div className="trace-actions">
+              <label className="trace-depth-control">
+                Depth
+                <input
+                  aria-label="Trace expand depth"
+                  max={20}
+                  min={0}
+                  onChange={(event) => {
+                    onExpandDepthChange(clampDepth(event.currentTarget.value));
+                    onExpandModeChange("depth");
+                  }}
+                  step={1}
+                  type="number"
+                  value={expandDepth}
+                />
+              </label>
+              <div className="icon-actions">
+                <button type="button" title="Expand trace" onClick={() => onExpandModeChange("expand")}>
+                  +
+                </button>
+                <button type="button" title="Collapse trace" onClick={() => onExpandModeChange("collapse")}>
+                  -
+                </button>
+              </div>
             </div>
           </div>
           <TraceTree
             addressLabels={addressLabels}
+            expandDepth={expandDepth}
             explorerBaseUrl={explorerBaseUrl}
             nodes={response?.structuredTrace ?? []}
             target={target}
@@ -132,6 +164,14 @@ function ViewButton(props: { label: string; value: OutputView; active: OutputVie
       {props.label}
     </button>
   );
+}
+
+function clampDepth(value: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return 0;
+  }
+  return Math.min(20, Math.max(0, Math.trunc(parsed)));
 }
 
 function readScrollTop(element: HTMLElement | null): number {

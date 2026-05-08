@@ -2,14 +2,8 @@
 pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
-
-interface ISimulateTxERC20 {
-  function approve(address spender, uint256 amount) external returns (bool);
-}
-
-interface ISimulateTxERC721 {
-  function approve(address spender, uint256 tokenId) external;
-}
+import "forge-std/interfaces/IERC20.sol";
+import "forge-std/interfaces/IERC721.sol";
 
 contract SimulateTxScript is Test {
   struct LabelOverride {
@@ -71,14 +65,14 @@ contract SimulateTxScript is Test {
     // override erc20 approvals
     for (uint256 i = 0; i < erc20ApprovalOverrides.length; i++) {
       vm.prank(erc20ApprovalOverrides[i].owner);
-      ISimulateTxERC20(erc20ApprovalOverrides[i].token)
+      IERC20(erc20ApprovalOverrides[i].token)
         .approve(erc20ApprovalOverrides[i].spender, erc20ApprovalOverrides[i].amount);
     }
 
     // override erc721 approvals
     for (uint256 i = 0; i < erc721ApprovalOverrides.length; i++) {
       vm.prank(erc721ApprovalOverrides[i].owner);
-      ISimulateTxERC721(erc721ApprovalOverrides[i].token)
+      IERC721(erc721ApprovalOverrides[i].token)
         .approve(erc721ApprovalOverrides[i].spender, erc721ApprovalOverrides[i].tokenId);
     }
 
