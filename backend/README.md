@@ -18,7 +18,7 @@ TXSIM_DEBUG_HTTP=1 go run ./cmd/server
 
 The server loads config from `TXSIM_CONFIG` when set. Otherwise it searches for `config.yaml`, `backend/config.yaml`, `config.yml`, `backend/config.yml`, then example YAML files.
 
-Use `config.example.yaml` as the starting point. The backend loads `.env` from the repo root and `backend/.env` before expanding RPC values, so requests only need to pass a chain name. `explorer_urls` maps the same chain names to block explorer base URLs for frontend address links.
+Use `config.example.yaml` as the starting point. The backend loads `.env` from the repo root and `backend/.env` before expanding RPC values, so requests only need to pass a chain name. `explorer_urls` maps the same chain names to block explorer base URLs for frontend address links. Set `COINGECKO_API_KEY` in `.env` if you want CoinGecko requests to include a demo API key.
 
 `max_concurrent_runs` is a channel-backed limiter for Forge executions. Keep it at `1` for the safest local behavior, or raise it if your machine/RPC can handle parallel simulations.
 
@@ -99,4 +99,4 @@ Use `config.example.yaml` as the starting point. The backend loads `.env` from t
 
 The response includes `erc20Transfers`, parsed from ERC20-style `Transfer(from, to, value)` trace events for later fund flow graph construction. Each item contains `token`, `from`, `to`, raw `amount`, and, when metadata is available, `normalizedAmount`, `symbol`, and `logoUrl`.
 
-The response also includes `balanceAnalysis`, which aggregates ERC20 transfers into signed per-user token balance changes. It fetches current USD prices, token decimals, and symbols from DefiLlama's coin prices API, adds Trust Wallet token logo URLs when the token address can be checksummed, then returns per-change `usdValue` and per-user `userTotals`.
+The response also includes `balanceAnalysis`, which aggregates ERC20 transfers into signed per-user token balance changes. It fetches token decimals and symbols from the configured chain RPC, then merges current USD prices and metadata from DefiLlama, CoinGecko, and DexScreener. Trust Wallet token logo URLs are used as a fallback when the token address can be checksummed. USD values are only calculated when both a price and token decimals are available.

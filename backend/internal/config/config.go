@@ -150,7 +150,9 @@ func loadDotEnvFile(path string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	scanner := bufio.NewScanner(file)
 	lineNumber := 0
@@ -175,7 +177,9 @@ func loadDotEnvFile(path string) error {
 		if _, exists := os.LookupEnv(key); exists {
 			continue
 		}
-		os.Setenv(key, trimEnvValue(value))
+		if err := os.Setenv(key, trimEnvValue(value)); err != nil {
+			return err
+		}
 	}
 	return scanner.Err()
 }

@@ -548,7 +548,9 @@ func callRPC(t *testing.T, rpcURL string, method string, params []any, result an
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	var rpcResp struct {
 		Result json.RawMessage `json:"result"`
@@ -627,8 +629,9 @@ func newTestService(cfg config.Config) *Service {
 	service.prices = fakePriceProvider{
 		prices: map[string]fundflow.TokenPrice{
 			strings.ToLower(wethAddress): {
-				PriceUSD: 2000,
-				Decimals: 18,
+				PriceUSD:    2000,
+				Decimals:    18,
+				HasDecimals: true,
 			},
 		},
 	}

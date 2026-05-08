@@ -57,7 +57,7 @@ func NewService(cfg config.Config) *Service {
 			Bin:      cfg.ForgeBin,
 			RepoRoot: cfg.RepoRoot,
 		},
-		prices:     prices.DefiLlamaProvider{},
+		prices:     prices.DefaultProvider(cfg.RPCURLs),
 		runLimiter: make(chan struct{}, cfg.MaxConcurrent),
 	}
 }

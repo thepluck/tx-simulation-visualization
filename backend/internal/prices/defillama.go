@@ -45,7 +45,9 @@ func (p DefiLlamaProvider) Fetch(ctx context.Context, chain string, tokens []str
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("defillama price request failed: %s", resp.Status)
 	}
@@ -71,10 +73,11 @@ func (p DefiLlamaProvider) Fetch(ctx context.Context, chain string, tokens []str
 			continue
 		}
 		out[strings.ToLower(token)] = fundflow.TokenPrice{
-			PriceUSD: price.Price,
-			Decimals: price.Decimals,
-			Symbol:   strings.TrimSpace(price.Symbol),
-			LogoURL:  trustWalletLogoURL(chain, token),
+			PriceUSD:    price.Price,
+			Decimals:    price.Decimals,
+			HasDecimals: true,
+			Symbol:      strings.TrimSpace(price.Symbol),
+			LogoURL:     trustWalletLogoURL(chain, token),
 		}
 	}
 	return out, nil

@@ -18,7 +18,7 @@ func EnrichERC20Transfers(transfers []model.ERC20Transfer, prices map[string]Tok
 		enriched[i].Symbol = price.Symbol
 		enriched[i].LogoURL = price.LogoURL
 		amount, ok := new(big.Int).SetString(transfer.Amount, 10)
-		if ok {
+		if ok && price.HasDecimals {
 			enriched[i].NormalizedAmount = formatTokenAmount(amount, price.Decimals)
 		}
 	}

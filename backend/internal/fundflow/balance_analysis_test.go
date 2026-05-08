@@ -19,10 +19,11 @@ func TestAnalyzeBalanceChanges(t *testing.T) {
 		},
 		map[string]TokenPrice{
 			"0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
-				PriceUSD: 2000,
-				Decimals: 18,
-				Symbol:   "WETH",
-				LogoURL:  "https://example.com/weth.png",
+				PriceUSD:    2000,
+				Decimals:    18,
+				HasDecimals: true,
+				Symbol:      "WETH",
+				LogoURL:     "https://example.com/weth.png",
 			},
 		},
 	)
@@ -84,6 +85,40 @@ func TestAnalyzeBalanceChangesWithoutPrice(t *testing.T) {
 	}
 }
 
+func TestAnalyzeBalanceChangesRequiresDecimalsForUSD(t *testing.T) {
+	analysis := AnalyzeBalanceChanges(
+		[]model.ERC20Transfer{
+			{
+				Token:  "0xToken",
+				From:   "0xFrom",
+				To:     "0xTo",
+				Amount: "1000000",
+			},
+		},
+		map[string]TokenPrice{
+			"0xtoken": {
+				PriceUSD: 1,
+				Symbol:   "USDC",
+			},
+		},
+	)
+
+	if analysis == nil || len(analysis.Changes) != 2 {
+		t.Fatalf("analysis = %#v", analysis)
+	}
+	for _, change := range analysis.Changes {
+		if change.Amount != change.RawAmount {
+			t.Fatalf("amount should stay raw without decimals: %#v", change)
+		}
+		if change.USDValue != nil {
+			t.Fatalf("usd value should be omitted without decimals: %#v", change)
+		}
+	}
+	if len(analysis.UserTotals) != 0 {
+		t.Fatalf("user totals = %#v, want empty", analysis.UserTotals)
+	}
+}
+
 func TestEnrichERC20Transfers(t *testing.T) {
 	transfers := EnrichERC20Transfers(
 		[]model.ERC20Transfer{
@@ -96,9 +131,10 @@ func TestEnrichERC20Transfers(t *testing.T) {
 		},
 		map[string]TokenPrice{
 			"0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
-				Decimals: 18,
-				Symbol:   "WETH",
-				LogoURL:  "https://example.com/weth.png",
+				Decimals:    18,
+				HasDecimals: true,
+				Symbol:      "WETH",
+				LogoURL:     "https://example.com/weth.png",
 			},
 		},
 	)

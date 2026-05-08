@@ -10,10 +10,11 @@ import (
 )
 
 type TokenPrice struct {
-	PriceUSD float64
-	Decimals int
-	Symbol   string
-	LogoURL  string
+	PriceUSD    float64
+	Decimals    int
+	HasDecimals bool
+	Symbol      string
+	LogoURL     string
 }
 
 func AnalyzeBalanceChanges(transfers []model.ERC20Transfer, prices map[string]TokenPrice) *model.BalanceAnalysis {
@@ -58,8 +59,15 @@ func AnalyzeBalanceChanges(transfers []model.ERC20Transfer, prices map[string]To
 		if price, ok := prices[token]; ok {
 			change.Symbol = price.Symbol
 			change.LogoURL = price.LogoURL
-			change.Amount = formatTokenAmount(rawAmount, price.Decimals)
-			if amountFloat, ok := tokenAmountFloat(rawAmount, price.Decimals); ok {
+			if price.HasDecimals {
+				change.Amount = formatTokenAmount(rawAmount, price.Decimals)
+			}
+			if price.HasDecimals && price.PriceUSD > 0 {
+				amountFloat, ok := tokenAmountFloat(rawAmount, price.Decimals)
+				if !ok {
+					changes = append(changes, change)
+					continue
+				}
 				usdValue := amountFloat * price.PriceUSD
 				change.USDValue = &usdValue
 				userTotals[user] += usdValue

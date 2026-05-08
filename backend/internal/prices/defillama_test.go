@@ -26,7 +26,7 @@ func TestDefiLlamaProviderFetch(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing price: %#v", got)
 	}
-	if price.PriceUSD != 2000.5 || price.Decimals != 18 {
+	if price.PriceUSD != 2000.5 || price.Decimals != 18 || !price.HasDecimals {
 		t.Fatalf("unexpected price: %#v", price)
 	}
 	if price.Symbol != "WETH" {

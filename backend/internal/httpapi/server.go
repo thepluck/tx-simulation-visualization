@@ -83,7 +83,11 @@ func (s *Server) handleBrowseProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSimulate(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
+	defer func() {
+		if err := r.Body.Close(); err != nil {
+			log.Printf("close request body: %v", err)
+		}
+	}()
 
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2<<20))
 	decoder.DisallowUnknownFields()
