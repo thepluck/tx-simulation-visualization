@@ -16,6 +16,26 @@ cd backend
 TXSIM_DEBUG_HTTP=1 go run ./cmd/server
 ```
 
+Docker is available as an optional deployment path from the repo root:
+
+```sh
+docker compose up --build backend
+```
+
+The Docker backend listens on `0.0.0.0:8080` inside the container and is published to `http://127.0.0.1:8080` by `docker-compose.yml`. Local `go run` deployment is unchanged.
+
+Override the Docker host port with `TXSIM_BACKEND_PORT`:
+
+```sh
+TXSIM_BACKEND_PORT=18080 docker compose up --build backend
+```
+
+Override the local backend listen address with `TXSIM_LISTEN_ADDR`:
+
+```sh
+TXSIM_LISTEN_ADDR=127.0.0.1:18080 go run ./cmd/server
+```
+
 The server loads config from `TXSIM_CONFIG` when set. Otherwise it searches for `config.yaml`, `backend/config.yaml`, `config.yml`, `backend/config.yml`, then example YAML files.
 
 Use `config.example.yaml` as the starting point. The backend loads `.env` from the repo root and `backend/.env` before expanding RPC values, so requests only need to pass a chain name. `explorer_urls` maps the same chain names to block explorer base URLs for frontend address links. Set `COINGECKO_API_KEY` in `.env` if you want CoinGecko requests to include a demo API key.
@@ -32,6 +52,8 @@ Use `config.example.yaml` as the starting point. The backend loads `.env` from t
 - `POST /simulate`
 
 `GET /browse/project` opens a native local folder picker and returns the selected project path. It is intended for the local frontend's Foundry Project browse button.
+
+Inside Docker, native project browsing is unavailable because the backend runs in a Linux container. Type or paste `projectPath` manually. The Compose stack mounts `TXSIM_PROJECTS_HOST_PATH` to `TXSIM_PROJECTS_CONTAINER_PATH`, and the backend can resolve host-style paths against that mounted project root.
 
 ## Simulate Request
 

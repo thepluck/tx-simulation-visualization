@@ -290,21 +290,65 @@ func (s *Service) normalizeProjectPath(value string) (string, error) {
 	if value == "" {
 		return "", nil
 	}
-	if !filepath.IsAbs(value) {
-		value = filepath.Join(s.cfg.RepoRoot, value)
+	if resolved, ok := existingDirectoryPath(s.cfg.RepoRoot, value); ok {
+		return resolved, nil
 	}
-	absPath, err := filepath.Abs(value)
+	if resolved, ok := s.resolveProjectRootPath(value); ok {
+		return resolved, nil
+	}
+	absPath, err := absoluteProjectPath(s.cfg.RepoRoot, value)
 	if err != nil {
 		return "", err
 	}
-	stat, err := os.Stat(absPath)
+	return "", fmt.Errorf("projectPath %q does not exist or is not mounted in the backend environment", absPath)
+}
+
+func (s *Service) resolveProjectRootPath(value string) (string, bool) {
+	suffixes := pathSuffixes(value)
+	for _, root := range s.cfg.ProjectRoots {
+		for _, suffix := range suffixes {
+			if resolved, ok := existingDirectoryPath(root, suffix); ok {
+				return resolved, true
+			}
+		}
+	}
+	return "", false
+}
+
+func existingDirectoryPath(baseDir string, value string) (string, bool) {
+	absPath, err := absoluteProjectPath(baseDir, value)
 	if err != nil {
-		return "", fmt.Errorf("projectPath %q: %w", absPath, err)
+		return "", false
 	}
-	if !stat.IsDir() {
-		return "", fmt.Errorf("projectPath %q is not a directory", absPath)
+	stat, err := os.Stat(absPath)
+	if err != nil || !stat.IsDir() {
+		return "", false
 	}
-	return absPath, nil
+	return absPath, true
+}
+
+func absoluteProjectPath(baseDir string, value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if !filepath.IsAbs(value) {
+		value = filepath.Join(baseDir, value)
+	}
+	return filepath.Abs(value)
+}
+
+func pathSuffixes(value string) []string {
+	cleaned := filepath.Clean(strings.TrimSpace(value))
+	if cleaned == "." || cleaned == string(filepath.Separator) {
+		return nil
+	}
+	parts := strings.Split(strings.Trim(cleaned, string(filepath.Separator)), string(filepath.Separator))
+	suffixes := make([]string, 0, len(parts))
+	for i := 0; i < len(parts); i++ {
+		suffix := filepath.Join(parts[i:]...)
+		if suffix != "." && suffix != "" {
+			suffixes = append(suffixes, suffix)
+		}
+	}
+	return suffixes
 }
 
 func validateCompilerConfig(config *model.CompilerConfig) error {

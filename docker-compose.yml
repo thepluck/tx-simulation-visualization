@@ -1,0 +1,27 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - .env
+    environment:
+      TXSIM_CONFIG: /app/backend/config.docker.yaml
+      TXSIM_PROJECTS_CONTAINER_PATH: ${TXSIM_PROJECTS_CONTAINER_PATH:-/workspace/projects}
+    ports:
+      - "${TXSIM_BACKEND_PORT:-8080}:8080"
+    volumes:
+      - backend-runs:/data/runs
+      - ${TXSIM_PROJECTS_HOST_PATH:-..}:${TXSIM_PROJECTS_CONTAINER_PATH:-/workspace/projects}
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    depends_on:
+      - backend
+    ports:
+      - "${TXSIM_FRONTEND_PORT:-5173}:80"
+
+volumes:
+  backend-runs:

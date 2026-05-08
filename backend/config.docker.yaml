@@ -1,0 +1,16 @@
+listen_addr: "0.0.0.0:8080"
+repo_root: "/app"
+project_roots:
+  - "${TXSIM_PROJECTS_CONTAINER_PATH}"
+work_dir: "/data/runs"
+timeout_seconds: 120
+max_concurrent_runs: 1
+forge_bin: "forge"
+rpc_urls:
+  mainnet: "${MAINNET_RPC_URL}"
+  base: "${BASE_RPC_URL}"
+  arbitrum: "${ARBITRUM_RPC_URL}"
+explorer_urls:
+  mainnet: "https://etherscan.io"
+  base: "https://basescan.org"
+  arbitrum: "https://arbiscan.io"

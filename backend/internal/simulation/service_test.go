@@ -347,6 +347,27 @@ func TestSimulateExternalProjectBuildsSrcCompilesOverrideAndRunsCopiedScript(t *
 	}
 }
 
+func TestNormalizeProjectPathResolvesMountedProjectRoot(t *testing.T) {
+	workspaceRoot := t.TempDir()
+	projectRoot := filepath.Join(workspaceRoot, "ks-dex-aggregator-sc")
+	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewService(config.Config{
+		RepoRoot:     t.TempDir(),
+		ProjectRoots: []string{workspaceRoot},
+	})
+
+	got, err := service.normalizeProjectPath("/host-only/workspaces/ks-dex-aggregator-sc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != projectRoot {
+		t.Fatalf("normalized project path = %q, want %q", got, projectRoot)
+	}
+}
+
 func logResponseIfEnabled(t *testing.T, resp model.SimulateResponse) {
 	t.Helper()
 

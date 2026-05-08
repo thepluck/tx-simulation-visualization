@@ -9,6 +9,7 @@ This folder contains the Vite, React, and TypeScript UI for the local transactio
 - `yarn lint`
 - `yarn build`
 - `yarn test:browser`
+- `docker compose config`
 
 ## Conventions
 

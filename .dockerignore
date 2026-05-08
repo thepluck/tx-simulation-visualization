@@ -1,0 +1,16 @@
+.git
+.env
+backend/.env
+backend/.runs
+cache
+out
+broadcast
+docs
+frontend/.vite
+frontend/dist
+frontend/node_modules
+frontend/playwright-report
+frontend/test-results
+node_modules
+*.log
+.DS_Store

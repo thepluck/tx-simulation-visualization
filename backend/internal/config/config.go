@@ -14,6 +14,7 @@ import (
 type Config struct {
 	ListenAddr     string            `yaml:"listen_addr"`
 	RepoRoot       string            `yaml:"repo_root"`
+	ProjectRoots   []string          `yaml:"project_roots"`
 	WorkDir        string            `yaml:"work_dir"`
 	TimeoutSeconds int               `yaml:"timeout_seconds"`
 	MaxConcurrent  int               `yaml:"max_concurrent_runs"`
@@ -64,17 +65,21 @@ func Load() (Config, string, error) {
 	if cfg.ListenAddr == "" {
 		cfg.ListenAddr = "127.0.0.1:8080"
 	}
+	if listenAddr := strings.TrimSpace(os.Getenv("TXSIM_LISTEN_ADDR")); listenAddr != "" {
+		cfg.ListenAddr = listenAddr
+	}
 	if cfg.RepoRoot == "" {
 		cfg.RepoRoot = ".."
 	}
-	if !filepath.IsAbs(cfg.RepoRoot) {
-		cfg.RepoRoot = filepath.Join(configDir, cfg.RepoRoot)
-	}
-	cfg.RepoRoot, err = filepath.Abs(cfg.RepoRoot)
+	cfg.RepoRoot, err = normalizeConfigPath(configDir, cfg.RepoRoot)
 	if err != nil {
 		return Config{}, "", err
 	}
 	if err := loadDotEnv(filepath.Join(cfg.RepoRoot, ".env"), filepath.Join(configDir, ".env")); err != nil {
+		return Config{}, "", err
+	}
+	cfg.ProjectRoots, err = normalizeConfigPaths(configDir, cfg.ProjectRoots)
+	if err != nil {
 		return Config{}, "", err
 	}
 
@@ -118,6 +123,37 @@ func Load() (Config, string, error) {
 	}
 
 	return cfg, configPath, nil
+}
+
+func normalizeConfigPaths(baseDir string, values []string) ([]string, error) {
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		normalized, err := normalizeConfigPath(baseDir, os.ExpandEnv(value))
+		if err != nil {
+			return nil, err
+		}
+		if normalized == "" {
+			continue
+		}
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
+	}
+	return out, nil
+}
+
+func normalizeConfigPath(baseDir string, value string) (string, error) {
+	value = strings.TrimSpace(os.ExpandEnv(value))
+	if value == "" {
+		return "", nil
+	}
+	if !filepath.IsAbs(value) {
+		value = filepath.Join(baseDir, value)
+	}
+	return filepath.Abs(value)
 }
 
 func loadDotEnv(paths ...string) error {
