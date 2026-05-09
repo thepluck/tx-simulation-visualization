@@ -1,13 +1,9 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
 
-declare const process: {
-  env: Record<string, string | undefined>;
-};
-
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".", "");
-  const apiUrl = process.env.TXSIM_API_URL ?? "http://127.0.0.1:8080";
+  const apiUrl = env.TXSIM_API_URL ?? "http://127.0.0.1:8080";
 
   return {
     plugins: [

@@ -98,6 +98,12 @@ def wait_for_exit(processes: dict[str, subprocess.Popen]) -> tuple[str, int]:
         time.sleep(0.25)
 
 
+def normalize_exit_status(status: int) -> int:
+    if status < 0:
+        return 128 + abs(status)
+    return status
+
+
 def main() -> int:
     args = parse_args()
     require_command("go")
@@ -136,8 +142,9 @@ def main() -> int:
         print("Press Ctrl-C to stop both servers.", flush=True)
 
         exited_name, status = wait_for_exit(processes)
-        print(f"{exited_name} exited with status {status}; stopping both servers.", flush=True)
-        return status
+        exit_status = normalize_exit_status(status)
+        print(f"{exited_name} exited with status {exit_status}; stopping both servers.", flush=True)
+        return exit_status
     except KeyboardInterrupt:
         print("\nStopping both servers.", flush=True)
         return 130
