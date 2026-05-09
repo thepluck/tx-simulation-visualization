@@ -1,6 +1,6 @@
-import { defaults, type FormState, type OutputView, type RequestTab, type ThemeMode } from "./form";
-import { simulateResponseSchema } from "./schemas";
-import type { SimulateResponse } from "./types";
+import { defaults, type FormState, type OutputView, type RequestTab, type ThemeMode } from "../app/form";
+import { simulateResponseSchema } from "../api/schemas";
+import type { SimulateResponse } from "../api/types";
 
 const storageKey = "txsim.ui.v1";
 

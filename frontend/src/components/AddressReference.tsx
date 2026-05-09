@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { explorerAddressUrl } from "../explorer";
-import { shortAddress } from "../format";
-import { labelForAddress, type AddressLabels } from "../labels";
+import { explorerAddressUrl } from "../lib/explorer";
+import { shortAddress } from "../lib/format";
+import { labelForAddress, type AddressLabels } from "../lib/labels";
 
 type AddressReferenceProps = {
   address: string;

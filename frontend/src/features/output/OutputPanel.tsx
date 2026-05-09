@@ -1,10 +1,10 @@
 import { useCallback, useLayoutEffect, useRef, type Dispatch, type SetStateAction } from "react";
-import type { ExpandMode, OutputView } from "../form";
-import type { AddressLabels } from "../labels";
-import type { SimulateResponse } from "../types";
-import BalanceAnalysisView from "./BalanceAnalysisView";
-import FundFlowGraph from "./FundFlowGraph";
-import TraceTree from "./TraceTree";
+import type { ExpandMode, OutputView } from "../../app/form";
+import type { AddressLabels } from "../../lib/labels";
+import type { SimulateResponse } from "../../api/types";
+import BalanceAnalysisView from "../balances/BalanceAnalysisView";
+import FundFlowGraph from "../fund-flow/FundFlowGraph";
+import TraceTree from "../trace/TraceTree";
 
 type OutputPanelProps = {
   addressLabels: AddressLabels;

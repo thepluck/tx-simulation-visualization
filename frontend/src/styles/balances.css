@@ -1,0 +1,90 @@
+.balance-analysis-table-wrap {
+  padding: 12px;
+}
+
+.balance-analysis.empty-state {
+  padding: 12px;
+}
+
+.balance-analysis-table th:first-child,
+.balance-analysis-table td:first-child {
+  width: 220px;
+}
+
+.balance-analysis-table th:last-child,
+.balance-analysis-table td:last-child {
+  width: 180px;
+}
+
+.token-change-list {
+  display: grid;
+  gap: 8px;
+}
+
+.token-change-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.token-logo,
+.token-logo-fallback {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border-radius: 50%;
+}
+
+.token-logo {
+  background: var(--surface-alt);
+}
+
+.token-logo-fallback {
+  display: inline-grid;
+  place-items: center;
+  background: var(--surface-alt);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.token-change-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.token-change-topline {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.token-symbol {
+  overflow: hidden;
+  max-width: 140px;
+  color: var(--text);
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-change-usd {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.total-usd-cell {
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.positive {
+  color: var(--ok);
+}
+
+.negative {
+  color: var(--danger);
+}

@@ -1,6 +1,6 @@
-import type { FormState, UpdateForm } from "../form";
-import type { ERC20ApprovalOverride, ERC20BalanceOverride, ERC721ApprovalOverride, LabelOverride } from "../types";
-import OverrideGroup, { type OverrideField } from "./OverrideGroup";
+import type { FormState, UpdateForm } from "../../app/form";
+import type { ERC20ApprovalOverride, ERC20BalanceOverride, ERC721ApprovalOverride, LabelOverride } from "../../api/types";
+import OverrideGroup, { type OverrideField } from "../../components/OverrideGroup";
 
 const labelFields: OverrideField<LabelOverride>[] = [
   { key: "account", label: "Account", placeholder: "0x..." },

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os/exec"
 	"strconv"
@@ -30,11 +31,13 @@ type anvilInstance struct {
 	port   int
 	client *http.Client
 
-	mu     sync.Mutex
-	cmd    *exec.Cmd
-	done   chan error
-	stdout bytes.Buffer
-	stderr bytes.Buffer
+	mu      sync.Mutex
+	cmd     *exec.Cmd
+	done    chan error
+	exited  bool
+	exitErr error
+	stdout  bytes.Buffer
+	stderr  bytes.Buffer
 }
 
 func newAnvilInstance(bin string, host string, port int) *anvilInstance {
@@ -76,6 +79,10 @@ func (a *anvilInstance) startLocked(ctx context.Context, rpcURL string, blockNum
 	a.stdout.Reset()
 	a.stderr.Reset()
 	slog.Info("anvil start started", "anvil_rpc", a.rpcURL(), "port", a.port, "fork_block", blockNumber.String())
+	if err := a.ensurePortAvailable(); err != nil {
+		slog.Warn("anvil start failed", "anvil_rpc", a.rpcURL(), "port", a.port, "fork_block", blockNumber.String(), "error", err)
+		return "", err
+	}
 
 	args := []string{
 		"--quiet",
@@ -94,6 +101,8 @@ func (a *anvilInstance) startLocked(ctx context.Context, rpcURL string, blockNum
 
 	a.cmd = cmd
 	a.done = make(chan error, 1)
+	a.exited = false
+	a.exitErr = nil
 	go func() {
 		a.done <- cmd.Wait()
 	}()
@@ -133,7 +142,13 @@ func (a *anvilInstance) waitReady(ctx context.Context) error {
 	defer ticker.Stop()
 
 	for {
+		if err, ok := a.processExitedLocked(); ok {
+			return a.anvilExitError(err)
+		}
 		if _, err := a.callRPC(ctx, "eth_chainId", []any{}); err == nil {
+			if err, ok := a.processExitedLocked(); ok {
+				return a.anvilExitError(err)
+			}
 			return nil
 		}
 
@@ -141,10 +156,27 @@ func (a *anvilInstance) waitReady(ctx context.Context) error {
 		case <-ctx.Done():
 			return fmt.Errorf("wait for anvil rpc at %s: %w: %s", a.rpcURL(), ctx.Err(), strings.TrimSpace(a.stderr.String()))
 		case err := <-a.done:
-			return fmt.Errorf("anvil exited before rpc was ready: %w: %s", err, strings.TrimSpace(a.stderr.String()))
+			a.recordProcessExitLocked(err)
+			return a.anvilExitError(err)
 		case <-ticker.C:
 		}
 	}
+}
+
+func (a *anvilInstance) anvilExitError(err error) error {
+	stderr := strings.TrimSpace(a.stderr.String())
+	if err == nil {
+		return fmt.Errorf("anvil exited before rpc was ready: clean exit: %s", stderr)
+	}
+	return fmt.Errorf("anvil exited before rpc was ready: %w: %s", err, stderr)
+}
+
+func (a *anvilInstance) ensurePortAvailable() error {
+	listener, err := net.Listen("tcp", net.JoinHostPort(a.host, strconv.Itoa(a.port)))
+	if err != nil {
+		return fmt.Errorf("anvil port %s is already in use; set anvil_port_start to a free port: %w", a.rpcURL(), err)
+	}
+	return listener.Close()
 }
 
 func (a *anvilInstance) callRPC(ctx context.Context, method string, params any) (json.RawMessage, error) {
@@ -196,12 +228,31 @@ func (a *anvilInstance) runningLocked() bool {
 	if a.cmd == nil || a.done == nil {
 		return false
 	}
-	select {
-	case <-a.done:
+	if _, ok := a.processExitedLocked(); ok {
 		return false
-	default:
-		return true
 	}
+	return true
+}
+
+func (a *anvilInstance) processExitedLocked() (error, bool) {
+	if a.done == nil {
+		return nil, false
+	}
+	if a.exited {
+		return a.exitErr, true
+	}
+	select {
+	case err := <-a.done:
+		a.recordProcessExitLocked(err)
+		return err, true
+	default:
+		return nil, false
+	}
+}
+
+func (a *anvilInstance) recordProcessExitLocked(err error) {
+	a.exited = true
+	a.exitErr = err
 }
 
 func (a *anvilInstance) stopLocked() {
@@ -209,13 +260,16 @@ func (a *anvilInstance) stopLocked() {
 		slog.Info("anvil stop started", "anvil_rpc", a.rpcURL(), "port", a.port)
 		_ = a.cmd.Process.Kill()
 		select {
-		case <-a.done:
+		case err := <-a.done:
+			a.recordProcessExitLocked(err)
 		case <-time.After(2 * time.Second):
 		}
 		slog.Info("anvil stop completed", "anvil_rpc", a.rpcURL(), "port", a.port)
 	}
 	a.cmd = nil
 	a.done = nil
+	a.exited = false
+	a.exitErr = nil
 }
 
 func (a *anvilInstance) rpcURL() string {

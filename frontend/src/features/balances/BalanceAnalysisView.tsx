@@ -1,8 +1,8 @@
-import { classForSignedNumber, formatSignedTokenAmount, formatSignedUSD, shortAddress } from "../format";
-import type { AddressLabels } from "../labels";
-import type { BalanceAnalysis, TokenBalanceChange } from "../types";
-import AddressReference from "./AddressReference";
-import TokenLogo from "./TokenLogo";
+import { classForSignedNumber, formatSignedTokenAmount, formatSignedUSD, shortAddress } from "../../lib/format";
+import type { AddressLabels } from "../../lib/labels";
+import type { BalanceAnalysis, TokenBalanceChange } from "../../api/types";
+import AddressReference from "../../components/AddressReference";
+import TokenLogo from "../../components/TokenLogo";
 
 type UserBalanceRow = {
   changes: TokenBalanceChange[];

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ExpandMode } from "../form";
-import { looksLikeTraceLabel, resolveAddressReference, resolveLabelAlias, type AddressLabels } from "../labels";
-import type { TraceNode } from "../types";
-import AddressReference from "./AddressReference";
+import type { ExpandMode } from "../../app/form";
+import { looksLikeTraceLabel, resolveAddressReference, resolveLabelAlias, type AddressLabels } from "../../lib/labels";
+import type { TraceNode } from "../../api/types";
+import AddressReference from "../../components/AddressReference";
 import TraceArguments from "./TraceArguments";
 
 type TraceTreeProps = {
