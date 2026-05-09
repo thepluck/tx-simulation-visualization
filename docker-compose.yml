@@ -4,7 +4,8 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       TXSIM_CONFIG: /app/backend/config.docker.yaml
       TXSIM_PROJECTS_CONTAINER_PATH: ${TXSIM_PROJECTS_CONTAINER_PATH:-/workspace/projects}
