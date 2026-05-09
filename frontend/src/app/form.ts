@@ -39,8 +39,10 @@ export type FormState = {
   noMetadata: boolean;
 };
 
+const defaultApiUrl = window.__TXSIM_CONFIG__?.apiUrl ?? "http://127.0.0.1:8080";
+
 export const defaults: FormState = {
-  apiUrl: "http://127.0.0.1:8080",
+  apiUrl: defaultApiUrl,
   chain: "mainnet",
   blockNumber: "",
   projectPath: "",

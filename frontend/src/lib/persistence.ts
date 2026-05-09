@@ -3,6 +3,7 @@ import { simulateResponseSchema } from "../api/schemas";
 import type { SimulateResponse } from "../api/types";
 
 const storageKey = "txsim.ui.v1";
+const legacyDefaultApiUrl = "http://127.0.0.1:8080";
 
 export type PersistedUIState = {
   form: FormState;
@@ -11,6 +12,7 @@ export type PersistedUIState = {
   response: SimulateResponse | null;
   theme: ThemeMode;
   traceExpandDepth: number;
+  defaultApiUrl?: string;
 };
 
 export function loadPersistedUIState(): PersistedUIState {
@@ -28,7 +30,7 @@ export function loadPersistedUIState(): PersistedUIState {
     const response = sanitizeResponse(parsed.response);
     const outputView = validOutputView(parsed.outputView) && response ? parsed.outputView : "trace";
     return {
-      form: sanitizeForm(parsed.form),
+      form: sanitizeForm(parsed.form, parsed.defaultApiUrl),
       outputView,
       requestTab: validRequestTab(parsed.requestTab) ? parsed.requestTab : "overrides",
       response,
@@ -45,17 +47,17 @@ export function savePersistedUIState(state: PersistedUIState) {
     return;
   }
   try {
-    window.localStorage.setItem(storageKey, JSON.stringify(state));
+    window.localStorage.setItem(storageKey, JSON.stringify({ ...state, defaultApiUrl: defaults.apiUrl }));
   } catch {
     try {
-      window.localStorage.setItem(storageKey, JSON.stringify({ ...state, response: null }));
+      window.localStorage.setItem(storageKey, JSON.stringify({ ...state, defaultApiUrl: defaults.apiUrl, response: null }));
     } catch {
       // Persisting is only a debugging convenience; never block the UI on quota issues.
     }
   }
 }
 
-function sanitizeForm(value: unknown): FormState {
+function sanitizeForm(value: unknown, persistedDefaultApiUrl: unknown): FormState {
   if (!value || typeof value !== "object") {
     return defaults;
   }
@@ -63,12 +65,29 @@ function sanitizeForm(value: unknown): FormState {
   const input = value as Partial<FormState>;
   const form = { ...defaults };
   for (const key of Object.keys(defaults) as Array<keyof FormState>) {
+    if (key === "apiUrl") {
+      continue;
+    }
+
     const next = input[key];
     if (next !== undefined) {
       form[key] = next as never;
     }
   }
+
+  if (typeof input.apiUrl === "string") {
+    form.apiUrl = apiUrlForRuntime(input.apiUrl, persistedDefaultApiUrl);
+  }
+
   return form;
+}
+
+function apiUrlForRuntime(savedApiUrl: string, persistedDefaultApiUrl: unknown): string {
+  const savedDefaultApiUrl = typeof persistedDefaultApiUrl === "string" ? persistedDefaultApiUrl : legacyDefaultApiUrl;
+  if (savedApiUrl === savedDefaultApiUrl) {
+    return defaults.apiUrl;
+  }
+  return savedApiUrl;
 }
 
 function defaultUIState(): PersistedUIState {

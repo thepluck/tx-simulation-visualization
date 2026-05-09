@@ -4,6 +4,20 @@ Local transaction simulation and visualization tooling. The backend runs Foundry
 
 ## Local Run
 
+Run the backend and frontend together:
+
+```sh
+python3 scripts/dev.py
+```
+
+Use custom local ports:
+
+```sh
+python3 scripts/dev.py --backend-port 18080 --frontend-port 15173
+```
+
+The script also points the frontend's default API URL at the selected backend port.
+
 Run the backend directly:
 
 ```sh
@@ -19,7 +33,7 @@ yarn install
 yarn dev
 ```
 
-The local frontend defaults to `http://127.0.0.1:8080` for the backend API.
+When run directly, the local frontend defaults to `http://127.0.0.1:8080` for the backend API.
 
 ## Docker Run
 
@@ -44,6 +58,8 @@ Override Docker host ports through `.env` or shell variables:
 ```sh
 TXSIM_BACKEND_PORT=18080 TXSIM_FRONTEND_PORT=15173 docker compose up --build
 ```
+
+The frontend container uses `TXSIM_BACKEND_PORT` to generate its browser runtime config, so the default API URL follows the published backend port. Set `TXSIM_API_URL` if the browser should call a different backend URL.
 
 For local deployment without Docker, use `TXSIM_LISTEN_ADDR` for the backend and `TXSIM_FRONTEND_PORT` for the Vite frontend:
 

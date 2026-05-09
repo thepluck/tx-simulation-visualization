@@ -23,6 +23,8 @@ services:
       dockerfile: Dockerfile
     depends_on:
       - backend
+    environment:
+      TXSIM_API_URL: "${TXSIM_API_URL:-http://127.0.0.1:${TXSIM_BACKEND_PORT:-8080}}"
     ports:
       - "${TXSIM_FRONTEND_PORT:-5173}:80"
 
