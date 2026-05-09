@@ -1,9 +1,9 @@
 import { FormEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchChainConfig, fetchHealth, fetchProjects, simulate } from "./api";
-import OutputPanel from "./components/OutputPanel";
-import RequestForm from "./components/RequestForm";
-import { explorerForChain } from "./explorer";
+import { fetchChainConfig, fetchHealth, fetchProjects, simulate } from "../api/client";
+import OutputPanel from "../features/output/OutputPanel";
+import RequestForm from "../features/request/RequestForm";
+import { explorerForChain } from "../lib/explorer";
 import {
   buildRequest,
   type ExpandMode,
@@ -13,9 +13,9 @@ import {
   type RequestTab,
   type ThemeMode
 } from "./form";
-import { buildAddressLabels } from "./labels";
-import { loadPersistedUIState, savePersistedUIState } from "./persistence";
-import type { SimulateRequest, SimulateResponse } from "./types";
+import { buildAddressLabels } from "../lib/labels";
+import { loadPersistedUIState, savePersistedUIState } from "../lib/persistence";
+import type { SimulateRequest, SimulateResponse } from "../api/types";
 
 export default function App() {
   const queryClient = useQueryClient();

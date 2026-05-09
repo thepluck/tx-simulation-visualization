@@ -1,6 +1,6 @@
 import { useState, type FormEventHandler } from "react";
-import { browseProject } from "../api";
-import type { FormState, HealthStatus, RequestTab, ThemeMode, UpdateForm } from "../form";
+import { browseProject } from "../../api/client";
+import type { FormState, HealthStatus, RequestTab, ThemeMode, UpdateForm } from "../../app/form";
 import ProjectHistoryDropdown from "./ProjectHistoryDropdown";
 import ScriptOverridesTab from "./ScriptOverridesTab";
 

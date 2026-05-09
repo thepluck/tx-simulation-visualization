@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -440,7 +442,30 @@ func loadTestConfig(t *testing.T) config.Config {
 		t.Skip("mainnet RPC URL is required")
 	}
 	cfg.TimeoutSeconds = 180
+	cfg.AnvilPortStart = freeTCPPort(t)
 	return cfg
+}
+
+func freeTCPPort(t *testing.T) int {
+	t.Helper()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	_, port, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, err := strconv.Atoi(port)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return value
 }
 
 func requireSimulationSuccess(t *testing.T, status int, resp model.SimulateResponse) {

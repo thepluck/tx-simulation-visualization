@@ -1,5 +1,5 @@
 import { shortAddress } from "./format";
-import type { ERC20Transfer, LabelOverride, SimulateResponse, TokenBalanceChange, TraceNode } from "./types";
+import type { ERC20Transfer, LabelOverride, SimulateResponse, TokenBalanceChange, TraceNode } from "../api/types";
 
 export type AddressLabels = {
   byAddress: Map<string, string>;

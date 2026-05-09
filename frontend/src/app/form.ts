@@ -1,3 +1,4 @@
+import { simulateRequestSchema } from "../api/schemas";
 import type {
   CompilerConfig,
   ERC20ApprovalOverride,
@@ -6,8 +7,7 @@ import type {
   LabelOverride,
   SimulateRequest,
   StateOverride
-} from "./types";
-import { simulateRequestSchema } from "./schemas";
+} from "../api/types";
 
 export type RequestTab = "overrides" | "state" | "compiler";
 export type OutputView = "trace" | "flow" | "balances" | "json";

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { type AddressLabels, isAddress, looksLikeTraceLabel, replaceLabelAliases, resolveAddressReference } from "../labels";
-import AddressReference from "./AddressReference";
+import { type AddressLabels, isAddress, looksLikeTraceLabel, replaceLabelAliases, resolveAddressReference } from "../../lib/labels";
+import AddressReference from "../../components/AddressReference";
 
 type TraceArgumentsProps = {
   addressLabels: AddressLabels;

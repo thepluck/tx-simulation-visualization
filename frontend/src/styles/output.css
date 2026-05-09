@@ -1,0 +1,32 @@
+.workspace {
+  min-width: 0;
+  padding: 20px;
+  overflow: auto;
+}
+
+.workspace-toolbar {
+  margin-bottom: 16px;
+}
+
+.workspace-toolbar p,
+.muted {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.output-view {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  min-height: calc(100vh - 88px);
+}
+
+.section-bar {
+  border-bottom: 1px solid var(--border);
+  padding: 12px 14px;
+}
+
+.icon-actions {
+  display: flex;
+  gap: 6px;
+}
