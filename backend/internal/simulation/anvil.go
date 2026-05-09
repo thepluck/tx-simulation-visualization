@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"tx-simulation-visualization/backend/internal/model"
+	"foundry-tx-simulator/backend/internal/model"
 )
 
 const (

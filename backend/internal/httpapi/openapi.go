@@ -11,7 +11,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3gen"
 
-	"tx-simulation-visualization/backend/internal/model"
+	"foundry-tx-simulator/backend/internal/model"
 )
 
 const (

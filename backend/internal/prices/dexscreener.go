@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"strings"
 
-	"tx-simulation-visualization/backend/internal/fundflow"
+	"foundry-tx-simulator/backend/internal/fundflow"
 )
 
 const dexScreenerBaseURL = "https://api.dexscreener.com/tokens/v1/"

@@ -1,3 +1,5 @@
+name: foundry-tx-simulator
+
 services:
   backend:
     build:

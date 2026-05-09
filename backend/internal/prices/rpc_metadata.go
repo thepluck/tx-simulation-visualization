@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strings"
 
-	"tx-simulation-visualization/backend/internal/fundflow"
+	"foundry-tx-simulator/backend/internal/fundflow"
 )
 
 const (

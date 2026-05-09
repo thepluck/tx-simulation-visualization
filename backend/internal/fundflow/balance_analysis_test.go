@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"tx-simulation-visualization/backend/internal/model"
+	"foundry-tx-simulator/backend/internal/model"
 )
 
 func TestAnalyzeBalanceChanges(t *testing.T) {

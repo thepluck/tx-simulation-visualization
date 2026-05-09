@@ -1663,6 +1663,31 @@ __metadata:
   languageName: node
   linkType: hard
 
+"foundry-tx-simulator-frontend@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "foundry-tx-simulator-frontend@workspace:."
+  dependencies:
+    "@dagrejs/dagre": "npm:^3.0.0"
+    "@eslint/js": "npm:^10.0.1"
+    "@playwright/test": "npm:^1.59.1"
+    "@tanstack/react-query": "npm:^5.100.9"
+    "@types/react": "npm:^19.2.7"
+    "@types/react-dom": "npm:^19.2.3"
+    "@vitejs/plugin-react": "npm:^5.1.1"
+    "@xyflow/react": "npm:^12.10.2"
+    eslint: "npm:^10.3.0"
+    eslint-plugin-react-hooks: "npm:^7.1.1"
+    eslint-plugin-react-refresh: "npm:^0.5.2"
+    globals: "npm:^17.6.0"
+    react: "npm:^19.2.1"
+    react-dom: "npm:^19.2.1"
+    typescript: "npm:^5.9.3"
+    typescript-eslint: "npm:^8.59.2"
+    vite: "npm:^7.2.7"
+    zod: "npm:^4.4.3"
+  languageName: unknown
+  linkType: soft
+
 "fsevents@npm:2.3.2":
   version: 2.3.2
   resolution: "fsevents@npm:2.3.2"
@@ -2277,31 +2302,6 @@ __metadata:
   checksum: 10c0/767849383c114e7f1971fa976b20e73ac28fd0c70d8d65c0004790bf4d8f89888c7e4cf6d5949f9c1beae9bc3c64835bef77bbe27fddf45a3c7b60cebcf85c8c
   languageName: node
   linkType: hard
-
-"tx-simulation-frontend@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "tx-simulation-frontend@workspace:."
-  dependencies:
-    "@dagrejs/dagre": "npm:^3.0.0"
-    "@eslint/js": "npm:^10.0.1"
-    "@playwright/test": "npm:^1.59.1"
-    "@tanstack/react-query": "npm:^5.100.9"
-    "@types/react": "npm:^19.2.7"
-    "@types/react-dom": "npm:^19.2.3"
-    "@vitejs/plugin-react": "npm:^5.1.1"
-    "@xyflow/react": "npm:^12.10.2"
-    eslint: "npm:^10.3.0"
-    eslint-plugin-react-hooks: "npm:^7.1.1"
-    eslint-plugin-react-refresh: "npm:^0.5.2"
-    globals: "npm:^17.6.0"
-    react: "npm:^19.2.1"
-    react-dom: "npm:^19.2.1"
-    typescript: "npm:^5.9.3"
-    typescript-eslint: "npm:^8.59.2"
-    vite: "npm:^7.2.7"
-    zod: "npm:^4.4.3"
-  languageName: unknown
-  linkType: soft
 
 "type-check@npm:^0.4.0, type-check@npm:~0.4.0":
   version: 0.4.0

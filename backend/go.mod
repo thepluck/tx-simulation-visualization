@@ -1,4 +1,4 @@
-module tx-simulation-visualization/backend
+module foundry-tx-simulator/backend
 
 go 1.25.0
 

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode"
 
-	"tx-simulation-visualization/backend/internal/model"
+	"foundry-tx-simulator/backend/internal/model"
 )
 
 type workNode struct {
