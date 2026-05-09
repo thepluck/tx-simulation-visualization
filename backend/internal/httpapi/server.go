@@ -11,10 +11,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"tx-simulation-visualization/backend/internal/config"
-	"tx-simulation-visualization/backend/internal/model"
-	"tx-simulation-visualization/backend/internal/projectcache"
-	"tx-simulation-visualization/backend/internal/simulation"
+	"foundry-tx-simulator/backend/internal/config"
+	"foundry-tx-simulator/backend/internal/model"
+	"foundry-tx-simulator/backend/internal/projectcache"
+	"foundry-tx-simulator/backend/internal/simulation"
 )
 
 type Server struct {

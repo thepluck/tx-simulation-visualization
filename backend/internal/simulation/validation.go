@@ -7,8 +7,8 @@ import (
 
 	"github.com/go-playground/validator/v10"
 
-	"tx-simulation-visualization/backend/internal/model"
-	"tx-simulation-visualization/backend/internal/solidity"
+	"foundry-tx-simulator/backend/internal/model"
+	"foundry-tx-simulator/backend/internal/solidity"
 )
 
 var simulateRequestValidator = newSimulateRequestValidator()

@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"tx-simulation-visualization/backend/internal/config"
-	"tx-simulation-visualization/backend/internal/httpapi"
+	"foundry-tx-simulator/backend/internal/config"
+	"foundry-tx-simulator/backend/internal/httpapi"
 )
 
 func main() {

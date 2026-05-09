@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"tx-simulation-visualization/backend/internal/model"
+	"foundry-tx-simulator/backend/internal/model"
 )
 
 func TestForgeCompilerArgsDefaultsToCurrentCompilePath(t *testing.T) {

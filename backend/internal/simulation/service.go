@@ -10,14 +10,14 @@ import (
 	"strings"
 	"time"
 
-	"tx-simulation-visualization/backend/internal/config"
-	"tx-simulation-visualization/backend/internal/forge"
-	"tx-simulation-visualization/backend/internal/fundflow"
-	"tx-simulation-visualization/backend/internal/model"
-	"tx-simulation-visualization/backend/internal/prices"
-	"tx-simulation-visualization/backend/internal/runid"
-	"tx-simulation-visualization/backend/internal/solidity"
-	"tx-simulation-visualization/backend/internal/traceparser"
+	"foundry-tx-simulator/backend/internal/config"
+	"foundry-tx-simulator/backend/internal/forge"
+	"foundry-tx-simulator/backend/internal/fundflow"
+	"foundry-tx-simulator/backend/internal/model"
+	"foundry-tx-simulator/backend/internal/prices"
+	"foundry-tx-simulator/backend/internal/runid"
+	"foundry-tx-simulator/backend/internal/solidity"
+	"foundry-tx-simulator/backend/internal/traceparser"
 )
 
 const (

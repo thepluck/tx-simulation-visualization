@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"tx-simulation-visualization/backend/internal/model"
+	"foundry-tx-simulator/backend/internal/model"
 )
 
 type TokenPrice struct {

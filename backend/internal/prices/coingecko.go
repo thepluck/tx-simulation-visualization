@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"tx-simulation-visualization/backend/internal/fundflow"
+	"foundry-tx-simulator/backend/internal/fundflow"
 )
 
 const coinGeckoBaseURL = "https://api.coingecko.com/api/v3/simple/token_price/"

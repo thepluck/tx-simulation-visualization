@@ -1,5 +1,5 @@
 {
-  "name": "tx-simulation-frontend",
+  "name": "foundry-tx-simulator-frontend",
   "version": "0.1.0",
   "private": true,
   "type": "module",

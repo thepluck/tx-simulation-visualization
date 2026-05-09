@@ -3,7 +3,7 @@ package fundflow
 import (
 	"math/big"
 
-	"tx-simulation-visualization/backend/internal/model"
+	"foundry-tx-simulator/backend/internal/model"
 )
 
 func EnrichERC20Transfers(transfers []model.ERC20Transfer, prices map[string]TokenPrice) []model.ERC20Transfer {

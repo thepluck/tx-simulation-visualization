@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"tx-simulation-visualization/backend/internal/config"
+	"foundry-tx-simulator/backend/internal/config"
 )
 
 func TestOpenAPIEndpoint(t *testing.T) {

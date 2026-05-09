@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"tx-simulation-visualization/backend/internal/fundflow"
+	"foundry-tx-simulator/backend/internal/fundflow"
 
 	"golang.org/x/crypto/sha3"
 )

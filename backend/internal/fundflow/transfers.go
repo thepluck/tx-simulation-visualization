@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"tx-simulation-visualization/backend/internal/model"
+	"foundry-tx-simulator/backend/internal/model"
 )
 
 const (

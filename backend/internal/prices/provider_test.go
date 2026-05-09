@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"tx-simulation-visualization/backend/internal/fundflow"
+	"foundry-tx-simulator/backend/internal/fundflow"
 )
 
 func TestMultiProviderMergesPriceMetadata(t *testing.T) {

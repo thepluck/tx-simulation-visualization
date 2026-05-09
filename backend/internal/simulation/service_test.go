@@ -16,10 +16,10 @@ import (
 	"testing"
 	"time"
 
-	"tx-simulation-visualization/backend/internal/config"
-	"tx-simulation-visualization/backend/internal/forge"
-	"tx-simulation-visualization/backend/internal/fundflow"
-	"tx-simulation-visualization/backend/internal/model"
+	"foundry-tx-simulator/backend/internal/config"
+	"foundry-tx-simulator/backend/internal/forge"
+	"foundry-tx-simulator/backend/internal/fundflow"
+	"foundry-tx-simulator/backend/internal/model"
 )
 
 const (
