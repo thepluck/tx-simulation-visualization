@@ -126,6 +126,13 @@
   outline: 2px solid var(--blue);
 }
 
+.trace-search-highlight {
+  border-radius: 3px;
+  background: rgba(234, 179, 8, 0.38);
+  color: inherit;
+  padding: 0 1px;
+}
+
 .trace-node > summary::-webkit-details-marker {
   display: none;
 }
