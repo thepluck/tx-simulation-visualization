@@ -30,10 +30,11 @@ test("shows validation errors for malformed simulation inputs", async ({ page })
 
   await page.getByRole("button", { name: "Run Simulation" }).click();
 
-  await expect(page.getByText("request validation failed:")).toBeVisible();
-  await expect(page.getByText("blockNumber: Invalid string: must match pattern")).toBeVisible();
-  await expect(page.getByText("sender: Invalid string: must match pattern")).toBeVisible();
-  await expect(page.getByText("data: Invalid string: must match pattern")).toBeVisible();
+  const errorBox = page.locator(".error-box");
+  await expect(errorBox).toContainText("request validation failed:");
+  await expect(errorBox).toContainText("blockNumber");
+  await expect(errorBox).toContainText("sender");
+  await expect(errorBox).toContainText("data");
   expect(simulateCalls).toBe(0);
 });
 

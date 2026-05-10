@@ -163,6 +163,7 @@ def main() -> int:
     frontend_env["TXSIM_API_URL"] = backend_url
 
     processes: dict[str, subprocess.Popen] = {}
+    output_threads: list[threading.Thread] = []
 
     try:
         processes["backend"] = start_process(
@@ -171,14 +172,15 @@ def main() -> int:
             ["go", "run", "./cmd/server"],
             backend_env,
         )
+        output_threads.append(start_output_thread("backend", processes["backend"]))
+
         processes["frontend"] = start_process(
             "frontend",
             ROOT_DIR / "frontend",
             frontend_command(args.host, args.frontend_port),
             frontend_env,
         )
-
-        output_threads = [start_output_thread(name, process) for name, process in processes.items()]
+        output_threads.append(start_output_thread("frontend", processes["frontend"]))
 
         print_status("")
         print_status(f"Frontend: http://{args.host}:{args.frontend_port}")
@@ -207,7 +209,7 @@ def main() -> int:
                 except ProcessLookupError:
                     pass
 
-        for thread in locals().get("output_threads", []):
+        for thread in output_threads:
             thread.join(timeout=1)
 
 

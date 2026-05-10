@@ -1,4 +1,5 @@
 import { simulateRequestSchema } from "../api/schemas";
+import { isAddress } from "../lib/labels";
 import type {
   CompilerConfig,
   ERC20ApprovalOverride,
@@ -8,8 +9,6 @@ import type {
   SimulateRequest,
   StateOverride
 } from "../api/types";
-
-const addressPattern = /^0x[0-9a-fA-F]{40}$/;
 
 export type RequestTab = "overrides" | "state" | "compiler";
 export type OutputView = "trace" | "flow" | "balances" | "json";
@@ -130,7 +129,7 @@ export function buildRequest(form: FormState): SimulateRequest {
 
 function withSenderLabel(sender: string, labels: LabelOverride[]): LabelOverride[] {
   const account = sender.trim();
-  if (!addressPattern.test(account) || labels.some((label) => label.account.toLowerCase() === account.toLowerCase())) {
+  if (!isAddress(account) || labels.some((label) => label.account.toLowerCase() === account.toLowerCase())) {
     return labels;
   }
   return [{ account, label: "Sender" }, ...labels];
