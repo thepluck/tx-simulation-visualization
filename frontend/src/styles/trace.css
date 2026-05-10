@@ -1,7 +1,38 @@
 .trace-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.trace-search-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.trace-search-control input {
+  width: min(220px, 32vw);
+  min-height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.trace-search-count {
+  min-width: 44px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
 }
 
 .trace-depth-control {
@@ -41,6 +72,11 @@
   text-align: center;
 }
 
+.icon-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
 .trace-tree {
   padding: 12px;
 }
@@ -76,6 +112,18 @@
 .trace-node > summary:hover,
 .trace-leaf:hover {
   background: var(--surface-alt);
+}
+
+.trace-node > summary.trace-search-match,
+.trace-leaf.trace-search-match {
+  background: var(--blue-bg);
+  outline: 1px solid var(--blue-bg-strong);
+}
+
+.trace-node > summary.trace-search-active,
+.trace-leaf.trace-search-active {
+  background: var(--blue-bg-strong);
+  outline: 2px solid var(--blue);
 }
 
 .trace-node > summary::-webkit-details-marker {

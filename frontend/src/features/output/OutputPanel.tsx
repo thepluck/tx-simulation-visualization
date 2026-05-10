@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { ExpandMode, OutputView } from "../../app/form";
 import type { AddressLabels } from "../../lib/labels";
 import type { SimulateResponse } from "../../api/types";
@@ -35,6 +35,9 @@ export default function OutputPanel(props: OutputPanelProps) {
   const workspaceRef = useRef<HTMLElement | null>(null);
   const scrollPositionsRef = useRef<Partial<Record<OutputView, number>>>({});
   const pendingScrollTopRef = useRef<number | null>(null);
+  const [traceSearchQuery, setTraceSearchQuery] = useState("");
+  const [traceMatchCount, setTraceMatchCount] = useState(0);
+  const [traceMatchIndex, setTraceMatchIndex] = useState(0);
 
   const handleOutputViewChange = useCallback(
     (nextView: OutputView) => {
@@ -55,6 +58,23 @@ export default function OutputPanel(props: OutputPanelProps) {
     pendingScrollTopRef.current = null;
     restoreScrollTop(workspaceRef.current, pendingScrollTop);
   }, [outputView]);
+
+  useEffect(() => {
+    setTraceMatchIndex(0);
+  }, [traceSearchQuery]);
+
+  useEffect(() => {
+    setTraceMatchIndex((current) => {
+      if (traceMatchCount === 0) {
+        return 0;
+      }
+      return Math.min(current, traceMatchCount - 1);
+    });
+  }, [traceMatchCount]);
+
+  const hasTraceQuery = traceSearchQuery.trim().length > 0;
+  const hasTraceMatches = traceMatchCount > 0;
+  const traceMatchLabel = hasTraceQuery && hasTraceMatches ? `${traceMatchIndex + 1}/${traceMatchCount}` : "0/0";
 
   return (
     <section
@@ -83,6 +103,47 @@ export default function OutputPanel(props: OutputPanelProps) {
           <div className="section-bar">
             <h3>Transaction Trace</h3>
             <div className="trace-actions">
+              <label className="trace-search-control">
+                Search
+                <input
+                  aria-label="Search trace"
+                  type="search"
+                  value={traceSearchQuery}
+                  onChange={(event) => setTraceSearchQuery(event.currentTarget.value)}
+                />
+              </label>
+              <span className="trace-search-count" aria-live="polite">
+                {traceMatchLabel}
+              </span>
+              <div className="icon-actions trace-search-actions">
+                <button
+                  aria-label="Previous trace match"
+                  disabled={!hasTraceMatches}
+                  title="Previous trace match"
+                  type="button"
+                  onClick={() => setTraceMatchIndex((current) => (current + traceMatchCount - 1) % traceMatchCount)}
+                >
+                  {"<"}
+                </button>
+                <button
+                  aria-label="Next trace match"
+                  disabled={!hasTraceMatches}
+                  title="Next trace match"
+                  type="button"
+                  onClick={() => setTraceMatchIndex((current) => (current + 1) % traceMatchCount)}
+                >
+                  {">"}
+                </button>
+                <button
+                  aria-label="Clear trace search"
+                  disabled={!hasTraceQuery}
+                  title="Clear trace search"
+                  type="button"
+                  onClick={() => setTraceSearchQuery("")}
+                >
+                  x
+                </button>
+              </div>
               <label className="trace-depth-control">
                 Depth
                 <input
@@ -114,6 +175,9 @@ export default function OutputPanel(props: OutputPanelProps) {
             explorerBaseUrl={explorerBaseUrl}
             nodes={response?.structuredTrace ?? []}
             expandMode={expandMode}
+            searchMatchIndex={traceMatchIndex}
+            searchQuery={traceSearchQuery}
+            onSearchMatchCountChange={setTraceMatchCount}
           />
         </section>
       )}
