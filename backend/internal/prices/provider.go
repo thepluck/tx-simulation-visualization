@@ -2,6 +2,7 @@ package prices
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -135,6 +136,28 @@ func defaultHTTPClient(client *http.Client) *http.Client {
 		return client
 	}
 	return &http.Client{Timeout: 10 * time.Second}
+}
+
+func fetchJSON(ctx context.Context, client *http.Client, endpoint string, service string, target any, configure func(*http.Request)) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	if configure != nil {
+		configure(req)
+	}
+
+	resp, err := defaultHTTPClient(client).Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("%s request failed: %s", service, resp.Status)
+	}
+	return json.NewDecoder(resp.Body).Decode(target)
 }
 
 func trimBaseURL(value string, fallback string) string {

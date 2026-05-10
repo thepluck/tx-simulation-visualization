@@ -1,4 +1,4 @@
-# Tx Simulation Backend
+# Foundry Tx Simulator Backend
 
 Local Go server that accepts simulation parameters, maps `chain` to an RPC URL from config, compiles optional state override Solidity, runs the existing Foundry script with CLI arguments, and returns both the raw Forge trace and a structured trace tree.
 

@@ -1,4 +1,4 @@
-# Tx Simulation Visualization
+# Foundry Tx Simulator
 
 Local transaction simulation and visualization tooling. The backend runs Foundry scripts and returns trace, fund-flow, and balance-analysis data; the frontend provides the local UI.
 

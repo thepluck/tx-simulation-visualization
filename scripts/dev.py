@@ -39,7 +39,7 @@ def parse_port(value: str) -> int:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run the local Tx Simulation backend and frontend together.",
+        description="Run the local Foundry Tx Simulator backend and frontend together.",
     )
     parser.add_argument(
         "--backend-port",

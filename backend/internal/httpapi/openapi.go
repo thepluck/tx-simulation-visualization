@@ -40,7 +40,7 @@ const swaggerHTML = `<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tx Simulation API</title>
+  <title>Foundry Tx Simulator API</title>
   <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
   <style>
     body { margin: 0; background: #f7f7f7; }
@@ -69,7 +69,7 @@ func openAPISpec(ctx context.Context) (*openapi3.T, error) {
 	spec := &openapi3.T{
 		OpenAPI: "3.0.3",
 		Info: &openapi3.Info{
-			Title:   "Tx Simulation API",
+			Title:   "Foundry Tx Simulator API",
 			Version: "0.1.0",
 		},
 		Paths:      openapi3.NewPaths(),
