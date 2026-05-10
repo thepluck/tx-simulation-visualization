@@ -35,6 +35,21 @@ yarn dev
 
 When run directly, the local frontend defaults to `http://127.0.0.1:8080` for the backend API.
 
+## Configuration
+
+Both local and Docker deployments can read `.env` values for `MAINNET_RPC_URL`, `BASE_RPC_URL`, `ARBITRUM_RPC_URL`, optional `ETHERSCAN_API_KEY`, and optional `COINGECKO_API_KEY`. Backend environment variables override YAML config values: use `TXSIM_` names for top-level backend settings and chain-specific names such as `MAINNET_RPC_URL` for RPC endpoints.
+
+Use `TXSIM_LISTEN_ADDR` for the local backend bind address, `TXSIM_FRONTEND_PORT` for the Vite frontend port, and `TXSIM_API_URL` when the browser should call a specific backend URL.
+
+For local deployment without Docker:
+
+```sh
+(cd backend && TXSIM_LISTEN_ADDR=127.0.0.1:18080 go run ./cmd/server)
+(cd frontend && TXSIM_FRONTEND_PORT=15173 TXSIM_API_URL=http://127.0.0.1:18080 yarn dev)
+```
+
+Local deployment stores recently used Foundry project paths in `backend/.runs/projects.json` by default.
+
 ## Docker Run
 
 Docker is optional and does not replace local deployment.
@@ -49,8 +64,6 @@ Then open:
 - Backend: `http://127.0.0.1:8080`
 - Swagger UI: `http://127.0.0.1:8080/docs`
 
-The Compose stack optionally reads `.env` for `MAINNET_RPC_URL`, `BASE_RPC_URL`, `ARBITRUM_RPC_URL`, optional `ETHERSCAN_API_KEY`, and optional `COINGECKO_API_KEY`. Backend environment variables override YAML config values: use `TXSIM_` names for top-level backend settings and chain-specific names such as `MAINNET_RPC_URL` for RPC endpoints.
-
 Docker stores recently used Foundry project paths in the `backend-runs` volume at `/data/runs/projects.json`, so project suggestions survive container rebuilds.
 
 Override Docker host ports through `.env` or shell variables:
@@ -60,15 +73,6 @@ TXSIM_BACKEND_PORT=18080 TXSIM_FRONTEND_PORT=15173 docker compose up --build
 ```
 
 The frontend container uses `TXSIM_BACKEND_PORT` to generate its browser runtime config, so the default API URL follows the published backend port. Set `TXSIM_API_URL` if the browser should call a different backend URL.
-
-For local deployment without Docker, use `TXSIM_LISTEN_ADDR` for the backend and `TXSIM_FRONTEND_PORT` for the Vite frontend:
-
-```sh
-(cd backend && TXSIM_LISTEN_ADDR=127.0.0.1:18080 go run ./cmd/server)
-(cd frontend && TXSIM_FRONTEND_PORT=15173 yarn dev)
-```
-
-Local deployment stores recently used Foundry project paths in `backend/.runs/projects.json` by default.
 
 For external Foundry projects, Docker mounts the parent directory of this repo by default:
 
