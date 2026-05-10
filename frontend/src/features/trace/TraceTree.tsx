@@ -99,13 +99,17 @@ function TraceNodeView(props: {
     if (props.expandMode === "depth") {
       setOpen(shouldOpenAtDepth(props.depth, props.expandDepth));
     }
-  }, [props.depth, props.expandDepth, props.expandMode, props.hasSearch, props.searchNode.subtreeMatches]);
+  }, [props.depth, props.expandDepth, props.expandMode, props.hasSearch, props.searchMatchIndex, props.searchNode.subtreeMatches]);
 
   useEffect(() => {
-    if (isActiveMatch) {
-      rowRef.current?.scrollIntoView({ block: "center" });
+    if (!isActiveMatch) {
+      return;
     }
-  }, [isActiveMatch]);
+    const frame = window.requestAnimationFrame(() => {
+      rowRef.current?.scrollIntoView({ block: "center" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isActiveMatch, props.searchMatchIndex]);
 
   const main = traceLabel(props.searchNode.node, props.addressLabels, props.explorerBaseUrl, props.highlightTerms);
   const kind = traceKindLabel(props.searchNode.node);
@@ -256,6 +260,10 @@ function traceSearchTerms(query: string, addressLabels: AddressLabels): string[]
 }
 
 function buildSearchTree(nodes: TraceNode[], terms: string[], addressLabels: AddressLabels): { nodes: SearchNode[]; matchCount: number } {
+  if (terms.length === 0) {
+    return { nodes: nodes.map((node) => inactiveSearchNode(node)), matchCount: 0 };
+  }
+
   let matchCount = 0;
   const searchNodes = nodes.map((node) => visitSearchNode(node));
   return { nodes: searchNodes, matchCount };
@@ -276,6 +284,16 @@ function buildSearchTree(nodes: TraceNode[], terms: string[], addressLabels: Add
       subtreeMatches: selfMatches || children.some((child) => child.subtreeMatches)
     };
   }
+}
+
+function inactiveSearchNode(node: TraceNode): SearchNode {
+  return {
+    children: (node.children ?? []).map((child) => inactiveSearchNode(child)),
+    matchIndex: null,
+    node,
+    selfMatches: false,
+    subtreeMatches: false
+  };
 }
 
 function traceSearchText(node: TraceNode, addressLabels: AddressLabels): string {

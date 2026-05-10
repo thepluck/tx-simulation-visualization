@@ -202,6 +202,16 @@ test("uses configured explorer links and renders only the last main call subtree
   await expect(page.getByLabel("Search trace")).toHaveValue("");
   await expect(page.locator(".trace-search-match")).toHaveCount(0);
   await expect(page.locator(".trace-search-highlight")).toHaveCount(0);
+  await page.getByLabel("Search trace").fill("decode");
+  await expect(page.locator(".trace-search-count")).toHaveText("1/2");
+  const decodeSummary = page.locator(".trace-node > summary").filter({ hasText: "decode" });
+  await expect(decodeSummary).toHaveCount(1);
+  await decodeSummary.click();
+  await page.getByLabel("Next trace match").click();
+  await expect(page.locator(".trace-search-count")).toHaveText("2/2");
+  await expect(page.locator(".trace-search-active")).toContainText("helper decode failed");
+  await expect(page.locator(".trace-search-active .trace-search-highlight")).toHaveText("decode");
+  await page.getByLabel("Clear trace search").click();
   await expectTraceDepth(page, 1, [true, false]);
 
   const bytesButton = page.locator(".trace-bytes-toggle").first();
