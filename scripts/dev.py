@@ -6,6 +6,8 @@ import os
 import shutil
 import signal
 import subprocess
+import sys
+import threading
 import time
 from pathlib import Path
 
@@ -14,6 +16,13 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_BACKEND_PORT = 8080
 DEFAULT_FRONTEND_PORT = 5173
+COLORS = {
+    "backend": "\033[36m",
+    "frontend": "\033[35m",
+    "status": "\033[2m",
+    "reset": "\033[0m",
+}
+print_lock = threading.Lock()
 
 
 def parse_port(value: str) -> int:
@@ -57,6 +66,16 @@ def require_command(command: str) -> None:
         raise SystemExit(f"{command} is required but was not found on PATH")
 
 
+def use_color() -> bool:
+    return sys.stdout.isatty() and "NO_COLOR" not in os.environ
+
+
+def colorize(value: str, color: str) -> str:
+    if not color or not use_color():
+        return value
+    return f"{color}{value}{COLORS['reset']}"
+
+
 def frontend_command(host: str, port: int) -> list[str]:
     vite_bin = ROOT_DIR / "frontend" / "node_modules" / ".bin" / "vite"
     vite_args = ["--host", host, "--port", str(port)]
@@ -69,13 +88,38 @@ def frontend_command(host: str, port: int) -> list[str]:
 
 
 def start_process(name: str, cwd: Path, command: list[str], env: dict[str, str]) -> subprocess.Popen:
-    print(f"Starting {name}: {' '.join(command)}", flush=True)
+    print_status(f"Starting {name}: {' '.join(command)}")
     return subprocess.Popen(
         command,
         cwd=cwd,
         env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
         start_new_session=True,
     )
+
+
+def print_status(message: str) -> None:
+    with print_lock:
+        print(colorize(message, COLORS["status"]), flush=True)
+
+
+def stream_output(name: str, process: subprocess.Popen) -> None:
+    prefix = colorize(f"[{name}]", COLORS.get(name, ""))
+    if process.stdout is None:
+        return
+
+    for line in process.stdout:
+        with print_lock:
+            print(f"{prefix} {line}", end="", flush=True)
+
+
+def start_output_thread(name: str, process: subprocess.Popen) -> threading.Thread:
+    thread = threading.Thread(target=stream_output, args=(name, process), daemon=True)
+    thread.start()
+    return thread
 
 
 def stop_process(process: subprocess.Popen) -> None:
@@ -119,6 +163,7 @@ def main() -> int:
     frontend_env["TXSIM_API_URL"] = backend_url
 
     processes: dict[str, subprocess.Popen] = {}
+    output_threads: list[threading.Thread] = []
 
     try:
         processes["backend"] = start_process(
@@ -127,26 +172,29 @@ def main() -> int:
             ["go", "run", "./cmd/server"],
             backend_env,
         )
+        output_threads.append(start_output_thread("backend", processes["backend"]))
+
         processes["frontend"] = start_process(
             "frontend",
             ROOT_DIR / "frontend",
             frontend_command(args.host, args.frontend_port),
             frontend_env,
         )
+        output_threads.append(start_output_thread("frontend", processes["frontend"]))
 
-        print()
-        print(f"Frontend: http://{args.host}:{args.frontend_port}")
-        print(f"Backend:  {backend_url}")
-        print(f"Swagger:  {backend_url}/docs")
-        print()
-        print("Press Ctrl-C to stop both servers.", flush=True)
+        print_status("")
+        print_status(f"Frontend: http://{args.host}:{args.frontend_port}")
+        print_status(f"Backend:  {backend_url}")
+        print_status(f"Swagger:  {backend_url}/docs")
+        print_status("")
+        print_status("Press Ctrl-C to stop both servers.")
 
         exited_name, status = wait_for_exit(processes)
         exit_status = normalize_exit_status(status)
-        print(f"{exited_name} exited with status {exit_status}; stopping both servers.", flush=True)
+        print_status(f"{exited_name} exited with status {exit_status}; stopping both servers.")
         return exit_status
     except KeyboardInterrupt:
-        print("\nStopping both servers.", flush=True)
+        print_status("\nStopping both servers.")
         return 130
     finally:
         for process in processes.values():
@@ -160,6 +208,9 @@ def main() -> int:
                     os.killpg(process.pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
+
+        for thread in output_threads:
+            thread.join(timeout=1)
 
 
 if __name__ == "__main__":

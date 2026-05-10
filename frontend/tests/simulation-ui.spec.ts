@@ -10,6 +10,34 @@ const recipient = "0x0000000000000000000000000000000000000003";
 const longBytes = `0x${"a".repeat(64)}`;
 const shortBytes = "0xaaaaaaaa...aaaaaaaa";
 
+test("shows validation errors for malformed simulation inputs", async ({ page }) => {
+  await routeBaseEndpoints(page);
+  let simulateCalls = 0;
+  await page.route(`${apiURL}/simulate`, async (route) => {
+    simulateCalls += 1;
+    await route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "simulate should not be called" })
+    });
+  });
+
+  await page.goto("/");
+  await page.getByLabel("Block").fill("not-a-block");
+  await page.getByLabel("Sender").fill("not-an-address");
+  await page.getByLabel("Target").fill(token);
+  await page.getByLabel("Calldata").fill("0x123");
+
+  await page.getByRole("button", { name: "Run Simulation" }).click();
+
+  const errorBox = page.locator(".error-box");
+  await expect(errorBox).toContainText("request validation failed:");
+  await expect(errorBox).toContainText("blockNumber");
+  await expect(errorBox).toContainText("sender");
+  await expect(errorBox).toContainText("data");
+  expect(simulateCalls).toBe(0);
+});
+
 test("changes the running action to abort and cancels the active request", async ({ page }) => {
   await routeBaseEndpoints(page);
   await page.route(`${apiURL}/simulate`, async (route) => {

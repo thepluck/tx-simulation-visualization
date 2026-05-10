@@ -1,4 +1,5 @@
 import { simulateRequestSchema } from "../api/schemas";
+import { isAddress } from "../lib/labels";
 import type {
   CompilerConfig,
   ERC20ApprovalOverride,
@@ -128,7 +129,7 @@ export function buildRequest(form: FormState): SimulateRequest {
 
 function withSenderLabel(sender: string, labels: LabelOverride[]): LabelOverride[] {
   const account = sender.trim();
-  if (!account || labels.some((label) => label.account.toLowerCase() === account.toLowerCase())) {
+  if (!isAddress(account) || labels.some((label) => label.account.toLowerCase() === account.toLowerCase())) {
     return labels;
   }
   return [{ account, label: "Sender" }, ...labels];

@@ -111,9 +111,17 @@ export default function App() {
       return;
     }
     setError("");
+    let request: SimulateRequest;
+    try {
+      request = buildRequest(form);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      return;
+    }
+
     const controller = new AbortController();
     simulationAbortRef.current = controller;
-    simulation.mutate({ apiUrl: form.apiUrl, request: buildRequest(form), signal: controller.signal });
+    simulation.mutate({ apiUrl: form.apiUrl, request, signal: controller.signal });
   };
 
   const abortSimulation = () => {
