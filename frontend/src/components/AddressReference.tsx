@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import { explorerAddressUrl } from "../lib/explorer";
 import { shortAddress } from "../lib/format";
 import { labelForAddress, type AddressLabels } from "../lib/labels";
+import { highlightSearchText } from "./SearchHighlight";
 
 type AddressReferenceProps = {
   address: string;
@@ -9,6 +10,7 @@ type AddressReferenceProps = {
   className?: string;
   displayLabel?: string;
   explorerBaseUrl: string;
+  highlightTerms?: string[];
 };
 
 export default function AddressReference(props: AddressReferenceProps) {
@@ -126,7 +128,7 @@ export default function AddressReference(props: AddressReferenceProps) {
       ref={referenceRef}
       tabIndex={0}
     >
-      <span className={`address-reference-text ${className}`}>{display}</span>
+      <span className={`address-reference-text ${className}`}>{highlightSearchText(display, props.highlightTerms)}</span>
       <span
         className="address-reference-card"
         onPointerEnter={openCard}

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExpandMode } from "../../app/form";
-import { looksLikeTraceLabel, resolveAddressReference, resolveLabelAlias, type AddressLabels } from "../../lib/labels";
+import { isAddress, looksLikeTraceLabel, resolveAddressReference, resolveLabelAlias, type AddressLabels } from "../../lib/labels";
 import type { TraceNode } from "../../api/types";
 import AddressReference from "../../components/AddressReference";
+import { highlightSearchText } from "../../components/SearchHighlight";
 import TraceArguments from "./TraceArguments";
 
 type TraceTreeProps = {
@@ -11,25 +12,54 @@ type TraceTreeProps = {
   expandDepth: number;
   explorerBaseUrl: string;
   nodes: TraceNode[];
+  searchMatchIndex: number;
+  searchQuery: string;
+  onSearchMatchCountChange: (count: number) => void;
 };
 
-export default function TraceTree(props: TraceTreeProps) {
-  const visibleNodes = useMemo(() => mainCallTrace(props.nodes), [props.nodes]);
+type SearchNode = {
+  children: SearchNode[];
+  matchIndex: number | null;
+  node: TraceNode;
+  selfMatches: boolean;
+  subtreeMatches: boolean;
+};
+
+export default function TraceTree({
+  addressLabels,
+  expandDepth,
+  expandMode,
+  explorerBaseUrl,
+  nodes,
+  onSearchMatchCountChange,
+  searchMatchIndex,
+  searchQuery
+}: TraceTreeProps) {
+  const visibleNodes = useMemo(() => mainCallTrace(nodes), [nodes]);
+  const searchTerms = useMemo(() => traceSearchTerms(searchQuery, addressLabels), [addressLabels, searchQuery]);
+  const searchResult = useMemo(() => buildSearchTree(visibleNodes, searchTerms, addressLabels), [addressLabels, searchTerms, visibleNodes]);
+
+  useEffect(() => {
+    onSearchMatchCountChange(searchResult.matchCount);
+  }, [onSearchMatchCountChange, searchResult.matchCount]);
 
   if (visibleNodes.length === 0) {
     return <div className="trace-tree empty-state">No trace</div>;
   }
   return (
     <div className="trace-tree">
-      {visibleNodes.map((node, index) => (
+      {searchResult.nodes.map((searchNode, index) => (
         <TraceNodeView
-          addressLabels={props.addressLabels}
-          explorerBaseUrl={props.explorerBaseUrl}
-          key={`${node.raw}-${index}`}
-          node={node}
-          expandMode={props.expandMode}
-          expandDepth={props.expandDepth}
+          addressLabels={addressLabels}
+          explorerBaseUrl={explorerBaseUrl}
+          key={`${searchNode.node.raw}-${index}`}
+          searchNode={searchNode}
+          expandMode={expandMode}
+          expandDepth={expandDepth}
           depth={0}
+          hasSearch={searchTerms.length > 0}
+          highlightTerms={searchTerms}
+          searchMatchIndex={searchMatchIndex}
         />
       ))}
     </div>
@@ -41,13 +71,25 @@ function TraceNodeView(props: {
   depth: number;
   expandDepth: number;
   explorerBaseUrl: string;
-  node: TraceNode;
+  searchNode: SearchNode;
   expandMode: ExpandMode;
+  hasSearch: boolean;
+  highlightTerms: string[];
+  searchMatchIndex: number;
 }) {
-  const hasChildren = Boolean(props.node.children?.length);
+  const hasChildren = props.searchNode.children.length > 0;
   const [open, setOpen] = useState(() => shouldOpenAtDepth(props.depth, props.expandDepth));
+  const rowRef = useRef<HTMLElement | null>(null);
+  const isActiveMatch = props.searchNode.matchIndex === props.searchMatchIndex;
 
   useEffect(() => {
+    if (props.hasSearch && props.searchNode.subtreeMatches) {
+      setOpen(true);
+      return;
+    }
+    if (props.hasSearch) {
+      return;
+    }
     if (props.expandMode === "expand") {
       setOpen(true);
     }
@@ -57,36 +99,66 @@ function TraceNodeView(props: {
     if (props.expandMode === "depth") {
       setOpen(shouldOpenAtDepth(props.depth, props.expandDepth));
     }
-  }, [props.depth, props.expandDepth, props.expandMode]);
+  }, [props.depth, props.expandDepth, props.expandMode, props.hasSearch, props.searchMatchIndex, props.searchNode.subtreeMatches]);
 
-  const main = traceLabel(props.node, props.addressLabels, props.explorerBaseUrl);
-  const kind = traceKindLabel(props.node);
-  const meta = props.node.gas ? `${props.node.gas} gas` : "";
+  useEffect(() => {
+    if (!isActiveMatch) {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      rowRef.current?.scrollIntoView({ block: "center" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isActiveMatch, props.searchMatchIndex]);
+
+  const main = traceLabel(props.searchNode.node, props.addressLabels, props.explorerBaseUrl, props.highlightTerms);
+  const kind = traceKindLabel(props.searchNode.node);
+  const meta = props.searchNode.node.gas ? `${props.searchNode.node.gas} gas` : "";
+  const rowClassName = traceRowClassName(props.searchNode.selfMatches, isActiveMatch);
   const content = (
     <>
-      <span className="trace-kind">{kind}</span>
+      <span className="trace-kind">{highlightSearchText(kind, props.highlightTerms)}</span>
       <span className="trace-main">{main}</span>
-      <span className="trace-meta">{meta}</span>
+      <span className="trace-meta">{highlightSearchText(meta, props.highlightTerms)}</span>
     </>
   );
 
   if (!hasChildren) {
-    return <div className="trace-leaf">{content}</div>;
+    return (
+      <div
+        className={rowClassName("trace-leaf")}
+        ref={(element) => {
+          rowRef.current = element;
+        }}
+      >
+        {content}
+      </div>
+    );
   }
 
   return (
     <details className="trace-node" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary>{content}</summary>
+      <summary
+        className={rowClassName("")}
+        ref={(element) => {
+          rowRef.current = element;
+        }}
+      >
+        {content}
+      </summary>
       <div className="trace-children">
-        {props.node.children?.map((child, index) => (
+        {props.searchNode.children.map((child, index) => (
           <TraceNodeView
             addressLabels={props.addressLabels}
             explorerBaseUrl={props.explorerBaseUrl}
-            key={`${child.raw}-${index}`}
-            node={child}
+            key={`${child.node.raw}-${index}`}
+            searchNode={child}
             expandMode={props.expandMode}
             expandDepth={props.expandDepth}
             depth={props.depth + 1}
+            hasSearch={props.hasSearch}
+            highlightTerms={props.highlightTerms}
+            searchMatchIndex={props.searchMatchIndex}
           />
         ))}
       </div>
@@ -94,15 +166,19 @@ function TraceNodeView(props: {
   );
 }
 
-function traceLabel(node: TraceNode, addressLabels: AddressLabels, explorerBaseUrl: string) {
+function traceRowClassName(matches: boolean, active: boolean): (base: string) => string {
+  return (base: string) => [base, matches ? "trace-search-match" : "", active ? "trace-search-active" : ""].filter(Boolean).join(" ");
+}
+
+function traceLabel(node: TraceNode, addressLabels: AddressLabels, explorerBaseUrl: string, highlightTerms: string[]) {
   if (node.kind === "call") {
     const addressRef = resolveAddressReference(node.target, addressLabels);
     const suffix = (
       <>
-        ::{node.function ?? "call"}
+        ::{highlightSearchText(node.function ?? "call", highlightTerms)}
         {node.arguments ? (
           <>
-            (<TraceArguments addressLabels={addressLabels} explorerBaseUrl={explorerBaseUrl} value={node.arguments} />)
+            (<TraceArguments addressLabels={addressLabels} explorerBaseUrl={explorerBaseUrl} highlightTerms={highlightTerms} value={node.arguments} />)
           </>
         ) : null}
       </>
@@ -110,7 +186,13 @@ function traceLabel(node: TraceNode, addressLabels: AddressLabels, explorerBaseU
     if (addressRef) {
       return (
         <>
-          <AddressReference address={addressRef.address} addressLabels={addressLabels} displayLabel={addressRef.label} explorerBaseUrl={explorerBaseUrl} />
+          <AddressReference
+            address={addressRef.address}
+            addressLabels={addressLabels}
+            displayLabel={addressRef.label}
+            explorerBaseUrl={explorerBaseUrl}
+            highlightTerms={highlightTerms}
+          />
           {suffix}
         </>
       );
@@ -118,15 +200,26 @@ function traceLabel(node: TraceNode, addressLabels: AddressLabels, explorerBaseU
     const target = resolveLabelAlias(node.target ?? "unknown", addressLabels);
     return (
       <>
-        {looksLikeTraceLabel(target) ? <span className="address-reference-text">{target}</span> : target}
+        {looksLikeTraceLabel(target) ? (
+          <span className="address-reference-text">{highlightSearchText(target, highlightTerms)}</span>
+        ) : (
+          highlightSearchText(target, highlightTerms)
+        )}
         {suffix}
       </>
     );
   }
   if (node.kind === "event") {
-    return <TraceArguments addressLabels={addressLabels} explorerBaseUrl={explorerBaseUrl} value={withoutEmitPrefix(node.value ?? node.raw)} />;
+    return (
+      <TraceArguments
+        addressLabels={addressLabels}
+        explorerBaseUrl={explorerBaseUrl}
+        highlightTerms={highlightTerms}
+        value={withoutEmitPrefix(node.value ?? node.raw)}
+      />
+    );
   }
-  return <TraceArguments addressLabels={addressLabels} explorerBaseUrl={explorerBaseUrl} value={resultDisplayValue(node)} />;
+  return <TraceArguments addressLabels={addressLabels} explorerBaseUrl={explorerBaseUrl} highlightTerms={highlightTerms} value={resultDisplayValue(node)} />;
 }
 
 function traceKindLabel(node: TraceNode): string {
@@ -142,6 +235,86 @@ function withoutEmitPrefix(value: string): string {
 
 function shouldOpenAtDepth(depth: number, expandDepth: number): boolean {
   return depth < expandDepth;
+}
+
+function traceSearchTerms(query: string, addressLabels: AddressLabels): string[] {
+  const trimmed = query.trim().toLowerCase();
+  if (!trimmed) {
+    return [];
+  }
+
+  const terms = new Set([trimmed]);
+  if (isAddress(trimmed)) {
+    const label = addressLabels.byAddress.get(trimmed);
+    if (label) {
+      terms.add(label.toLowerCase());
+    }
+  }
+
+  const address = addressLabels.byLabel.get(trimmed);
+  if (address) {
+    terms.add(address.toLowerCase());
+  }
+
+  return Array.from(terms);
+}
+
+function buildSearchTree(nodes: TraceNode[], terms: string[], addressLabels: AddressLabels): { nodes: SearchNode[]; matchCount: number } {
+  if (terms.length === 0) {
+    return { nodes: nodes.map((node) => inactiveSearchNode(node)), matchCount: 0 };
+  }
+
+  let matchCount = 0;
+  const searchNodes = nodes.map((node) => visitSearchNode(node));
+  return { nodes: searchNodes, matchCount };
+
+  function visitSearchNode(node: TraceNode): SearchNode {
+    const text = traceSearchText(node, addressLabels);
+    const selfMatches = terms.length > 0 && terms.some((term) => text.includes(term));
+    const matchIndex = selfMatches ? matchCount : null;
+    if (selfMatches) {
+      matchCount += 1;
+    }
+    const children = (node.children ?? []).map((child) => visitSearchNode(child));
+    return {
+      children,
+      matchIndex,
+      node,
+      selfMatches,
+      subtreeMatches: selfMatches || children.some((child) => child.subtreeMatches)
+    };
+  }
+}
+
+function inactiveSearchNode(node: TraceNode): SearchNode {
+  return {
+    children: (node.children ?? []).map((child) => inactiveSearchNode(child)),
+    matchIndex: null,
+    node,
+    selfMatches: false,
+    subtreeMatches: false
+  };
+}
+
+function traceSearchText(node: TraceNode, addressLabels: AddressLabels): string {
+  const addressRef = node.kind === "call" ? resolveAddressReference(node.target, addressLabels) : undefined;
+  const targetLabel = addressRef?.label ?? resolveLabelAlias(node.target ?? "", addressLabels);
+  return [
+    node.kind,
+    node.callType,
+    node.target,
+    targetLabel,
+    addressRef?.address,
+    node.function,
+    node.arguments,
+    node.value,
+    node.raw,
+    node.resultType,
+    node.gas?.toString()
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
 }
 
 function mainCallTrace(nodes: TraceNode[]): TraceNode[] {

@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { type AddressLabels, isAddress, looksLikeTraceLabel, replaceLabelAliases, resolveAddressReference } from "../../lib/labels";
 import AddressReference from "../../components/AddressReference";
+import { highlightSearchText } from "../../components/SearchHighlight";
 
 type TraceArgumentsProps = {
   addressLabels: AddressLabels;
   explorerBaseUrl: string;
+  highlightTerms?: string[];
   value: string;
 };
 
@@ -36,7 +38,7 @@ export default function TraceArguments(props: TraceArgumentsProps) {
     <>
       {splitArgumentPieces(props.value, props.addressLabels).map((piece, index) => {
         if (piece.kind === "bytes") {
-          return <CollapsibleBytes key={`${piece.value}-${index}`} value={piece.value} />;
+          return <CollapsibleBytes highlightTerms={props.highlightTerms} key={`${piece.value}-${index}`} value={piece.value} />;
         }
         if (piece.kind === "address") {
           return (
@@ -44,6 +46,7 @@ export default function TraceArguments(props: TraceArgumentsProps) {
               address={piece.value}
               addressLabels={props.addressLabels}
               explorerBaseUrl={props.explorerBaseUrl}
+              highlightTerms={props.highlightTerms}
               key={`${piece.value}-${index}`}
             />
           );
@@ -55,17 +58,18 @@ export default function TraceArguments(props: TraceArgumentsProps) {
               addressLabels={props.addressLabels}
               displayLabel={piece.label}
               explorerBaseUrl={props.explorerBaseUrl}
+              highlightTerms={props.highlightTerms}
               key={`${piece.label}-${piece.address}-${index}`}
             />
           );
         }
-        return replaceLabelAliases(piece.value, props.addressLabels);
+        return highlightSearchText(replaceLabelAliases(piece.value, props.addressLabels), props.highlightTerms);
       })}
     </>
   );
 }
 
-function CollapsibleBytes(props: { value: string }) {
+function CollapsibleBytes(props: { highlightTerms?: string[]; value: string }) {
   const [expanded, setExpanded] = useState(false);
   const display = expanded ? props.value : shortenBytes(props.value);
 
@@ -80,7 +84,7 @@ function CollapsibleBytes(props: { value: string }) {
       }}
       type="button"
     >
-      {display}
+      {highlightSearchText(display, props.highlightTerms)}
     </button>
   );
 }

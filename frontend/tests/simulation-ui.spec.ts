@@ -7,6 +7,7 @@ const helper = "0x1111111111111111111111111111111111111111";
 const owner = "0x0000000000000000000000000000000000000001";
 const spender = "0x0000000000000000000000000000000000000002";
 const recipient = "0x0000000000000000000000000000000000000003";
+const searchOnlyAccount = "0x0000000000000000000000000000000000000004";
 const longBytes = `0x${"a".repeat(64)}`;
 const shortBytes = "0xaaaaaaaa...aaaaaaaa";
 
@@ -116,6 +117,7 @@ test("uses configured explorer links and renders only the last main call subtree
   await page.getByLabel("Calldata").fill("0x23b872dd");
   await addLabel(page, owner, "WETHOwner");
   await addLabel(page, recipient, "WETHRecipient");
+  await addLabel(page, searchOnlyAccount, "SearchOnlyAlias");
   await page.getByRole("button", { name: "Compiler" }).click();
   await expect(page.getByLabel("Solc")).toBeVisible();
 
@@ -186,6 +188,30 @@ test("uses configured explorer links and renders only the last main call subtree
   await expect(page.locator(".trace-tree .trace-main > .address-reference-text").filter({ hasText: "UnmappedToken" })).toHaveCount(1);
   await expect(page.locator(".trace-tree .trace-main > .address-reference-text").filter({ hasText: "MetaAggregationRouterV2" })).toHaveCount(1);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(flowScrollTop);
+  await page.getByLabel("Search trace").fill(searchOnlyAccount);
+  await expect(page.locator(".trace-search-count")).toHaveText("1/1");
+  await expect(page.locator(".trace-search-match")).toHaveCount(1);
+  await expect(page.locator(".trace-search-active")).toContainText("SearchOnlyAlias");
+  await expect(page.locator(".trace-search-active .trace-search-highlight")).toHaveText("SearchOnlyAlias");
+  await page.getByLabel("Clear trace search").click();
+  await page.getByLabel("Search trace").fill("SearchOnly");
+  await expect(page.locator(".trace-search-count")).toHaveText("1/1");
+  await expect(page.locator(".trace-search-match")).toHaveCount(1);
+  await expect(page.locator(".trace-search-active .trace-search-highlight")).toHaveText("SearchOnly");
+  await page.getByLabel("Clear trace search").click();
+  await expect(page.getByLabel("Search trace")).toHaveValue("");
+  await expect(page.locator(".trace-search-match")).toHaveCount(0);
+  await expect(page.locator(".trace-search-highlight")).toHaveCount(0);
+  await page.getByLabel("Search trace").fill("decode");
+  await expect(page.locator(".trace-search-count")).toHaveText("1/2");
+  const decodeSummary = page.locator(".trace-node > summary").filter({ hasText: "decode" });
+  await expect(decodeSummary).toHaveCount(1);
+  await decodeSummary.click();
+  await page.getByLabel("Next trace match").click();
+  await expect(page.locator(".trace-search-count")).toHaveText("2/2");
+  await expect(page.locator(".trace-search-active")).toContainText("helper decode failed");
+  await expect(page.locator(".trace-search-active .trace-search-highlight")).toHaveText("decode");
+  await page.getByLabel("Clear trace search").click();
   await expectTraceDepth(page, 1, [true, false]);
 
   const bytesButton = page.locator(".trace-bytes-toggle").first();
@@ -449,6 +475,13 @@ function simulateResponse() {
                 gas: 70,
                 target: "MetaAggregationRouterV2",
                 function: "swap"
+              },
+              {
+                raw: "[75] SearchOnlyAlias::inspect()",
+                kind: "call",
+                gas: 75,
+                target: "SearchOnlyAlias",
+                function: "inspect"
               },
               {
                 raw: `[80] UnmappedToken::transfer(${recipient}, 1000000000000000000)`,
