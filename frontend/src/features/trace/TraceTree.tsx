@@ -38,7 +38,6 @@ export default function TraceTree({
   const visibleNodes = useMemo(() => mainCallTrace(nodes), [nodes]);
   const searchTerms = useMemo(() => traceSearchTerms(searchQuery, addressLabels), [addressLabels, searchQuery]);
   const searchResult = useMemo(() => buildSearchTree(visibleNodes, searchTerms, addressLabels), [addressLabels, searchTerms, visibleNodes]);
-  const highlightQuery = searchQuery.trim();
 
   useEffect(() => {
     onSearchMatchCountChange(searchResult.matchCount);
@@ -59,7 +58,7 @@ export default function TraceTree({
           expandDepth={expandDepth}
           depth={0}
           hasSearch={searchTerms.length > 0}
-          highlightQuery={highlightQuery}
+          highlightTerms={searchTerms}
           searchMatchIndex={searchMatchIndex}
         />
       ))}
@@ -75,7 +74,7 @@ function TraceNodeView(props: {
   searchNode: SearchNode;
   expandMode: ExpandMode;
   hasSearch: boolean;
-  highlightQuery: string;
+  highlightTerms: string[];
   searchMatchIndex: number;
 }) {
   const hasChildren = props.searchNode.children.length > 0;
@@ -108,15 +107,15 @@ function TraceNodeView(props: {
     }
   }, [isActiveMatch]);
 
-  const main = traceLabel(props.searchNode.node, props.addressLabels, props.explorerBaseUrl, props.highlightQuery);
+  const main = traceLabel(props.searchNode.node, props.addressLabels, props.explorerBaseUrl, props.highlightTerms);
   const kind = traceKindLabel(props.searchNode.node);
   const meta = props.searchNode.node.gas ? `${props.searchNode.node.gas} gas` : "";
   const rowClassName = traceRowClassName(props.searchNode.selfMatches, isActiveMatch);
   const content = (
     <>
-      <span className="trace-kind">{highlightSearchText(kind, props.highlightQuery)}</span>
+      <span className="trace-kind">{highlightSearchText(kind, props.highlightTerms)}</span>
       <span className="trace-main">{main}</span>
-      <span className="trace-meta">{highlightSearchText(meta, props.highlightQuery)}</span>
+      <span className="trace-meta">{highlightSearchText(meta, props.highlightTerms)}</span>
     </>
   );
 
@@ -154,7 +153,7 @@ function TraceNodeView(props: {
             expandDepth={props.expandDepth}
             depth={props.depth + 1}
             hasSearch={props.hasSearch}
-            highlightQuery={props.highlightQuery}
+            highlightTerms={props.highlightTerms}
             searchMatchIndex={props.searchMatchIndex}
           />
         ))}
@@ -167,15 +166,15 @@ function traceRowClassName(matches: boolean, active: boolean): (base: string) =>
   return (base: string) => [base, matches ? "trace-search-match" : "", active ? "trace-search-active" : ""].filter(Boolean).join(" ");
 }
 
-function traceLabel(node: TraceNode, addressLabels: AddressLabels, explorerBaseUrl: string, highlightQuery: string) {
+function traceLabel(node: TraceNode, addressLabels: AddressLabels, explorerBaseUrl: string, highlightTerms: string[]) {
   if (node.kind === "call") {
     const addressRef = resolveAddressReference(node.target, addressLabels);
     const suffix = (
       <>
-        ::{highlightSearchText(node.function ?? "call", highlightQuery)}
+        ::{highlightSearchText(node.function ?? "call", highlightTerms)}
         {node.arguments ? (
           <>
-            (<TraceArguments addressLabels={addressLabels} explorerBaseUrl={explorerBaseUrl} highlightQuery={highlightQuery} value={node.arguments} />)
+            (<TraceArguments addressLabels={addressLabels} explorerBaseUrl={explorerBaseUrl} highlightTerms={highlightTerms} value={node.arguments} />)
           </>
         ) : null}
       </>
@@ -188,7 +187,7 @@ function traceLabel(node: TraceNode, addressLabels: AddressLabels, explorerBaseU
             addressLabels={addressLabels}
             displayLabel={addressRef.label}
             explorerBaseUrl={explorerBaseUrl}
-            highlightQuery={highlightQuery}
+            highlightTerms={highlightTerms}
           />
           {suffix}
         </>
@@ -198,9 +197,9 @@ function traceLabel(node: TraceNode, addressLabels: AddressLabels, explorerBaseU
     return (
       <>
         {looksLikeTraceLabel(target) ? (
-          <span className="address-reference-text">{highlightSearchText(target, highlightQuery)}</span>
+          <span className="address-reference-text">{highlightSearchText(target, highlightTerms)}</span>
         ) : (
-          highlightSearchText(target, highlightQuery)
+          highlightSearchText(target, highlightTerms)
         )}
         {suffix}
       </>
@@ -211,12 +210,12 @@ function traceLabel(node: TraceNode, addressLabels: AddressLabels, explorerBaseU
       <TraceArguments
         addressLabels={addressLabels}
         explorerBaseUrl={explorerBaseUrl}
-        highlightQuery={highlightQuery}
+        highlightTerms={highlightTerms}
         value={withoutEmitPrefix(node.value ?? node.raw)}
       />
     );
   }
-  return <TraceArguments addressLabels={addressLabels} explorerBaseUrl={explorerBaseUrl} highlightQuery={highlightQuery} value={resultDisplayValue(node)} />;
+  return <TraceArguments addressLabels={addressLabels} explorerBaseUrl={explorerBaseUrl} highlightTerms={highlightTerms} value={resultDisplayValue(node)} />;
 }
 
 function traceKindLabel(node: TraceNode): string {

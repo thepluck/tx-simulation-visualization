@@ -10,7 +10,7 @@ type AddressReferenceProps = {
   className?: string;
   displayLabel?: string;
   explorerBaseUrl: string;
-  highlightQuery?: string;
+  highlightTerms?: string[];
 };
 
 export default function AddressReference(props: AddressReferenceProps) {
@@ -128,7 +128,7 @@ export default function AddressReference(props: AddressReferenceProps) {
       ref={referenceRef}
       tabIndex={0}
     >
-      <span className={`address-reference-text ${className}`}>{highlightSearchText(display, props.highlightQuery ?? "")}</span>
+      <span className={`address-reference-text ${className}`}>{highlightSearchText(display, props.highlightTerms)}</span>
       <span
         className="address-reference-card"
         onPointerEnter={openCard}

@@ -192,7 +192,7 @@ test("uses configured explorer links and renders only the last main call subtree
   await expect(page.locator(".trace-search-count")).toHaveText("1/1");
   await expect(page.locator(".trace-search-match")).toHaveCount(1);
   await expect(page.locator(".trace-search-active")).toContainText("SearchOnlyAlias");
-  await expect(page.locator(".trace-search-highlight")).toHaveCount(0);
+  await expect(page.locator(".trace-search-active .trace-search-highlight")).toHaveText("SearchOnlyAlias");
   await page.getByLabel("Clear trace search").click();
   await page.getByLabel("Search trace").fill("SearchOnly");
   await expect(page.locator(".trace-search-count")).toHaveText("1/1");
