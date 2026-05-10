@@ -128,8 +128,8 @@
 
 .trace-search-highlight {
   border-radius: 3px;
-  background: rgba(234, 179, 8, 0.38);
-  color: inherit;
+  background: var(--search-highlight-bg);
+  color: var(--search-highlight-text);
   padding: 0 1px;
 }
 

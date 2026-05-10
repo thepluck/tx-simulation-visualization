@@ -20,6 +20,8 @@
   --blue: #2563eb;
   --blue-bg: rgba(38, 87, 194, 0.08);
   --blue-bg-strong: rgba(38, 87, 194, 0.14);
+  --search-highlight-bg: #facc15;
+  --search-highlight-text: #422006;
   --line: #7b8794;
   --floating-bg: rgba(255, 255, 255, 0.94);
   --floating-border: rgba(224, 229, 236, 0.9);
@@ -52,6 +54,8 @@
   --blue: #93c5fd;
   --blue-bg: rgba(147, 197, 253, 0.12);
   --blue-bg-strong: rgba(147, 197, 253, 0.2);
+  --search-highlight-bg: #fde047;
+  --search-highlight-text: #1f1300;
   --line: #93a4b8;
   --floating-bg: rgba(23, 29, 36, 0.96);
   --floating-border: rgba(71, 85, 105, 0.86);
