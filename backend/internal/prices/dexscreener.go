@@ -2,8 +2,6 @@ package prices
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -34,22 +32,6 @@ func (p DexScreenerProvider) Fetch(ctx context.Context, chain string, tokens []s
 	}
 
 	endpoint := trimBaseURL(p.BaseURL, dexScreenerBaseURL) + "/" + url.PathEscape(chainID) + "/" + strings.Join(tokens, ",")
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := defaultHTTPClient(p.Client).Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("dexscreener price request failed: %s", resp.Status)
-	}
-
 	var pairs []struct {
 		BaseToken struct {
 			Address string `json:"address"`
@@ -62,7 +44,7 @@ func (p DexScreenerProvider) Fetch(ctx context.Context, chain string, tokens []s
 			ImageURL string `json:"imageUrl"`
 		} `json:"info"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&pairs); err != nil {
+	if err := fetchJSON(ctx, p.Client, endpoint, "dexscreener price", &pairs, nil); err != nil {
 		return nil, err
 	}
 

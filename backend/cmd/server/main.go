@@ -29,7 +29,7 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	slog.Info("tx simulation backend listening", "url", "http://"+cfg.ListenAddr)
+	slog.Info("foundry tx simulator backend listening", "url", "http://"+cfg.ListenAddr)
 	slog.Info("config loaded", "path", configPath)
 	slog.Info(
 		"simulation workers configured",

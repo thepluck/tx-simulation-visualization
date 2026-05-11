@@ -2,13 +2,11 @@ package prices
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
-	"time"
 
 	"foundry-tx-simulator/backend/internal/fundflow"
 
@@ -28,31 +26,6 @@ func (p DefiLlamaProvider) Fetch(ctx context.Context, chain string, tokens []str
 		return nil, nil
 	}
 
-	client := p.Client
-	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
-	}
-
-	baseURL := p.BaseURL
-	if baseURL == "" {
-		baseURL = defillamaBaseURL
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+strings.Join(coins, ","), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("defillama price request failed: %s", resp.Status)
-	}
-
 	var payload struct {
 		Coins map[string]struct {
 			Price    float64 `json:"price"`
@@ -60,7 +33,8 @@ func (p DefiLlamaProvider) Fetch(ctx context.Context, chain string, tokens []str
 			Symbol   string  `json:"symbol"`
 		} `json:"coins"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	endpoint := trimBaseURL(p.BaseURL, defillamaBaseURL) + "/" + strings.Join(coins, ",")
+	if err := fetchJSON(ctx, p.Client, endpoint, "defillama price", &payload, nil); err != nil {
 		return nil, err
 	}
 

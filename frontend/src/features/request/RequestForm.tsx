@@ -58,7 +58,7 @@ export default function RequestForm(props: RequestFormProps) {
   return (
     <section className="control-panel" aria-label="Simulation request">
       <div className="panel-header">
-        <h1>Tx Simulation</h1>
+        <h1>Foundry Tx Simulator</h1>
         <div className="panel-header-actions">
           <button
             aria-label={theme === "dark" ? "Use light theme" : "Use dark theme"}

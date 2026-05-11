@@ -1,4 +1,4 @@
-# Tx Simulation Frontend
+# Foundry Tx Simulator Frontend
 
 ```bash
 yarn install

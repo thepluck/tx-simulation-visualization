@@ -2,8 +2,6 @@ package prices
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -49,33 +47,19 @@ func (p CoinGeckoProvider) Fetch(ctx context.Context, chain string, tokens []str
 
 func (p CoinGeckoProvider) fetchOne(ctx context.Context, platform string, token string) (fundflow.TokenPrice, error) {
 	endpoint := trimBaseURL(p.BaseURL, coinGeckoBaseURL) + "/" + url.PathEscape(platform)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return fundflow.TokenPrice{}, err
-	}
-	query := req.URL.Query()
-	query.Set("contract_addresses", token)
-	query.Set("vs_currencies", "usd")
-	req.URL.RawQuery = query.Encode()
-	if strings.TrimSpace(p.APIKey) != "" {
-		req.Header.Set("x-cg-demo-api-key", strings.TrimSpace(p.APIKey))
-	}
-
-	resp, err := defaultHTTPClient(p.Client).Do(req)
-	if err != nil {
-		return fundflow.TokenPrice{}, err
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fundflow.TokenPrice{}, fmt.Errorf("coingecko price request failed: %s", resp.Status)
-	}
-
 	var payload map[string]struct {
 		USD float64 `json:"usd"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	apiKey := strings.TrimSpace(p.APIKey)
+	if err := fetchJSON(ctx, p.Client, endpoint, "coingecko price", &payload, func(req *http.Request) {
+		query := req.URL.Query()
+		query.Set("contract_addresses", token)
+		query.Set("vs_currencies", "usd")
+		req.URL.RawQuery = query.Encode()
+		if apiKey != "" {
+			req.Header.Set("x-cg-demo-api-key", apiKey)
+		}
+	}); err != nil {
 		return fundflow.TokenPrice{}, err
 	}
 
