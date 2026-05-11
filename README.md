@@ -169,7 +169,7 @@ git push origin v0.1.0
 
 The workflow checks the existing CI status on the tagged merge commit before publishing release artifacts. It uploads backend server archives for Linux and macOS, a frontend `dist` archive, and `SHA256SUMS`.
 
-Use the manual Release workflow dispatch only when re-running release creation for an existing `v*` tag.
+Use the manual Release workflow dispatch only when re-running release creation for an existing `v*` tag after deleting the existing GitHub release for that tag.
 
 ## Foundry Contracts
 
