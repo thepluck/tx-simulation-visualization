@@ -13,9 +13,6 @@ on:
 
 permissions: {}
 
-env:
-  FOUNDRY_PROFILE: ci
-
 jobs:
   release:
     name: Release
@@ -31,7 +28,7 @@ jobs:
           persist-credentials: false
           submodules: recursive
 
-      - name: Resolve release tag
+      - name: Resolve release tag and checked commit
         id: release
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -51,8 +48,49 @@ jobs:
               ;;
           esac
 
-          git rev-parse "${tag}" >/dev/null
+          release_commit="$(git rev-list -n 1 "${tag}")"
+
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "release_commit=${release_commit}" >> "${GITHUB_OUTPUT}"
+          echo "checked_commit=${release_commit}" >> "${GITHUB_OUTPUT}"
+
+      - name: Check release commit CI status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECKED_COMMIT: ${{ steps.release.outputs.checked_commit }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          required_workflows=(
+            "Backend CI"
+            "Contracts CI"
+            "Docker Compose CI"
+            "Frontend CI"
+          )
+
+          for workflow in "${required_workflows[@]}"; do
+            run="$(gh run list \
+              --repo "${REPOSITORY}" \
+              --workflow "${workflow}" \
+              --commit "${CHECKED_COMMIT}" \
+              --limit 20 \
+              --json status,conclusion,createdAt,url \
+              --jq '[.[] | select(.status == "completed")] | sort_by(.createdAt) | reverse | .[0]')"
+
+            if [ -z "${run}" ] || [ "${run}" = "null" ]; then
+              echo "No completed ${workflow} run found for release commit ${CHECKED_COMMIT}" >&2
+              exit 1
+            fi
+
+            conclusion="$(jq -r '.conclusion' <<< "${run}")"
+            url="$(jq -r '.url' <<< "${run}")"
+
+            if [ "${conclusion}" != "success" ]; then
+              echo "${workflow} is ${conclusion} for release commit ${CHECKED_COMMIT}: ${url}" >&2
+              exit 1
+            fi
+
+            echo "${workflow} succeeded for release commit ${CHECKED_COMMIT}: ${url}"
+          done
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -72,47 +110,9 @@ jobs:
         working-directory: frontend
         run: yarn install --immutable
 
-      - name: Install Playwright browser
-        working-directory: frontend
-        run: yarn playwright install --with-deps chromium
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-
-      - name: Run backend tests
-        working-directory: backend
-        run: go test ./...
-
-      - name: Run backend lint
-        working-directory: backend
-        run: make lint
-
-      - name: Run contract format check
-        working-directory: contracts
-        run: forge fmt --check
-
-      - name: Run contract build
-        working-directory: contracts
-        run: forge build --sizes
-
-      - name: Run contract tests
-        working-directory: contracts
-        run: forge test -vvv
-
-      - name: Run frontend lint
-        working-directory: frontend
-        run: yarn lint
-
       - name: Build frontend
         working-directory: frontend
         run: yarn build
-
-      - name: Run browser tests
-        working-directory: frontend
-        run: yarn test:browser
-
-      - name: Validate Docker Compose config
-        run: docker compose config
 
       - name: Package backend binaries
         env:
