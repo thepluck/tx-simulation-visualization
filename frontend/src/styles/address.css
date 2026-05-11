@@ -4,15 +4,13 @@
   width: fit-content;
 }
 
-.address-reference::after {
-  content: "";
-  position: absolute;
-  z-index: 19;
-  left: 0;
-  top: 100%;
-  display: none;
-  width: max(100%, 270px);
-  height: 8px;
+.address-reference-trigger {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: inherit;
 }
 
 .address-reference-text {
@@ -21,7 +19,7 @@
   text-decoration: none;
 }
 
-.address-reference:focus-visible {
+.address-reference-trigger:focus-visible {
   border-radius: 4px;
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
@@ -30,7 +28,7 @@
 .address-reference-card {
   position: fixed;
   z-index: 20;
-  display: none;
+  display: inline-flex;
   width: max-content;
   max-width: min(420px, calc(100vw - 16px));
   border: 1px solid var(--border);
@@ -39,14 +37,6 @@
   box-shadow: var(--shadow-pop);
   padding: 6px;
   overflow: hidden;
-}
-
-.address-reference.active .address-reference-card {
-  display: inline-flex;
-}
-
-.address-reference.active::after {
-  display: block;
 }
 
 .address-reference-card-row {
@@ -85,8 +75,9 @@
 }
 
 .address-copy-button {
-  position: relative;
-  flex: 0 0 24px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
   width: 24px;
   height: 24px;
   border: 1px solid var(--border);
@@ -101,25 +92,13 @@
   color: var(--blue);
 }
 
-.address-copy-button::before,
-.address-copy-button::after {
-  content: "";
-  position: absolute;
-  width: 9px;
-  height: 9px;
-  border: 1.5px solid currentColor;
-  border-radius: 2px;
-  background: var(--surface-alt);
-}
-
-.address-copy-button::before {
-  left: 7px;
-  top: 6px;
-}
-
-.address-copy-button::after {
-  left: 5px;
-  top: 8px;
+.copy-icon {
+  width: 16px;
+  height: 16px;
+  fill: var(--surface-alt);
+  stroke: currentColor;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
 }
 
 .address-copy-button.copied {

@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
   apiURL,
   explorerURL,
+  helper,
   longBytes,
   owner,
   recipient,
@@ -150,8 +151,13 @@ test("uses configured explorer links and renders only the last main call subtree
   await expect.poll(() => flowColumnCount(page)).toBeGreaterThanOrEqual(3);
   await expect(page.locator(`.flow-svg a[href="${explorerURL}/address/${owner}"]`)).toHaveCount(1);
   await expect(page.locator(`.flow-svg a[href="${explorerURL}/address/${recipient}"]`)).toHaveCount(1);
-  await expect(page.locator(`.edge-table .address-reference-card-link[href="${explorerURL}/address/${owner}"]`)).toHaveCount(51);
-  await expect(page.locator(".edge-table tbody tr").nth(0).locator(".address-reference-text").first()).toHaveText("WETHOwner");
+  const ownerTableReference = page.locator(".edge-table tbody tr").nth(0).locator(".address-reference").first();
+  await expect(ownerTableReference.locator(".address-reference-text")).toHaveText("WETHOwner");
+  await ownerTableReference.click();
+  const ownerTableAddressCard = page.getByRole("dialog", { name: "Address details" });
+  await expect(ownerTableAddressCard.locator(`a[href="${explorerURL}/address/${owner}"]`)).toHaveText(owner);
+  await ownerTableReference.click();
+  await expect(ownerTableAddressCard).toBeHidden();
 
   await page.evaluate(() => {
     window.scrollTo(0, 360);
@@ -164,7 +170,7 @@ test("uses configured explorer links and renders only the last main call subtree
   await expect(page.locator(".trace-tree")).toContainText("UnmappedToken");
   await expect(page.locator(".trace-tree")).toContainText("Transfer(from:");
   await expect(page.locator(".trace-tree")).not.toContainText("callTarget:");
-  await expect(page.locator(".trace-tree")).not.toContainText("WETH:");
+  await expect(page.locator(".trace-tree")).not.toContainText("WETH: [");
   await expect(page.locator(".trace-tree")).not.toContainText("WETH9");
   await expect(page.locator(".trace-tree")).not.toContainText("TraceRecipient");
   await expect(page.locator(".trace-tree")).not.toContainText(`WETHRecipient: [${recipient}]`);
@@ -177,21 +183,79 @@ test("uses configured explorer links and renders only the last main call subtree
   await expect(page.locator(".trace-tree")).not.toContainText("[Return]");
   await expect(page.locator(".trace-tree")).not.toContainText("[Stop]");
   await expect(page.locator(".trace-tree")).not.toContainText("delegatecall | 400 gas");
+  await expect(page.locator(".trace-tree > .trace-node > summary").first()).toHaveCSS("align-items", "center");
   await expect(page.locator(".trace-tree > .trace-node > summary .trace-kind").first()).toHaveText("delegatecall");
   await expect(page.locator(".trace-tree > .trace-node > summary .trace-meta").first()).toHaveText("400 gas");
+  await expect(page.locator(".trace-tree > .trace-node > summary .trace-meta").first()).toHaveClass(/trace-gas/);
+  await expect(page.locator(".trace-tree > .trace-node > summary .trace-meta").first()).not.toHaveCSS("font-weight", "800");
+  await expect(page.locator(".trace-tree > .trace-node > summary .trace-meta").first()).toHaveCSS("transform", "none");
+  const siblingKindLeftGroups = await page.locator(".trace-children").evaluateAll((groups) =>
+    groups
+      .map((group) =>
+        Array.from(group.children)
+          .map((entry) => {
+            const row = entry.matches("details") ? entry.querySelector(":scope > summary") : entry.querySelector(":scope > .trace-leaf");
+            return row?.querySelector(".trace-kind")?.getBoundingClientRect().left ?? null;
+          })
+          .filter((left): left is number => left !== null)
+      )
+      .filter((lefts) => lefts.length > 1)
+  );
+  expect(siblingKindLeftGroups.length).toBeGreaterThan(0);
+  for (const lefts of siblingKindLeftGroups) {
+    expect(Math.max(...lefts) - Math.min(...lefts)).toBeLessThanOrEqual(1);
+  }
   await expect(page.locator(".trace-tree .address-reference-text").filter({ hasText: "callTarget" })).toHaveCount(0);
   await expect(page.locator(".trace-tree .address-reference-text").filter({ hasText: "srcToken" })).toHaveCount(0);
-  await expect(page.locator(`.trace-tree .address-reference-card-link[href="${explorerURL}/address/${token}"]`)).toHaveCount(3);
-  const tokenReference = page
-    .locator(".trace-tree .address-reference")
-    .filter({ has: page.locator(`.address-reference-card-link[href="${explorerURL}/address/${token}"]`) })
-    .first();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(flowScrollTop);
+  const transferFunction = page.locator(".trace-tree .function-reference").filter({ hasText: "transferFrom" }).first();
+  const functionCard = page.getByRole("dialog", { name: "Function details" });
+  await expect(functionCard).toBeHidden();
+  await transferFunction.hover();
+  await expect(functionCard).toBeHidden();
+  await expect(transferFunction.getByRole("button", { name: "transferFrom" })).toHaveAttribute("aria-haspopup", "dialog");
+  await transferFunction.click();
+  await expect(functionCard).toBeVisible();
+  await expectLocatorInsideViewport(page, functionCard);
+  await expect(functionCard.locator("code").first()).toHaveCSS("white-space", "normal");
+  await expect(functionCard.locator("code").first()).toHaveCSS("overflow-wrap", "normal");
+  await expect(functionCard.locator("code").first().locator("wbr")).toHaveCount(2);
+  await expect(functionCard.locator(".function-reference-card-label").first()).toHaveCSS("font-size", "13px");
+  await expect(functionCard).toHaveCSS("align-items", "baseline");
+  await expect(functionCard).toContainText("transferFrom(address,address,uint256)");
+  await expect(functionCard).toContainText("0x23b872dd");
+  await expect(functionCard.getByRole("button", { name: "Copy function signature transferFrom(address,address,uint256)" })).toBeVisible();
+  await expect(functionCard.getByRole("button", { name: "Copy function selector 0x23b872dd" })).toBeVisible();
+  await functionCard.locator("code").first().click();
+  await expect.poll(() => page.locator(".trace-tree > .trace-node").first().evaluate((node) => (node as HTMLDetailsElement).open)).toBe(true);
+  await functionCard.getByRole("button", { name: "Copy function selector 0x23b872dd" }).click();
+  await expect.poll(() => page.locator(".trace-tree > .trace-node").first().evaluate((node) => (node as HTMLDetailsElement).open)).toBe(true);
+  await expect(page.locator(".trace-tree .function-reference").filter({ hasText: "fallback" })).toHaveCount(0);
+  await expect(page.locator(".trace-tree .trace-function").filter({ hasText: "fallback" })).toHaveCount(1);
+  const tokenReference = page.locator(".trace-tree .address-reference", { hasText: /^WETH$/ }).first();
   await expect(tokenReference.locator(".address-reference-text")).toHaveText("WETH");
+  await tokenReference.hover();
+  const tokenAddressCard = page.getByRole("dialog", { name: "Address details" });
+  await expect(tokenAddressCard).toBeHidden();
+  await expect(tokenReference.getByRole("button", { name: "WETH" })).toHaveAttribute("aria-haspopup", "dialog");
+  await tokenReference.click();
+  await expect(tokenAddressCard).toBeVisible();
+  await expect(tokenAddressCard.locator(`a[href="${explorerURL}/address/${token}"]`)).toHaveText(token);
+  await tokenAddressCard.getByRole("button", { name: `Copy ${token}` }).click();
+  await expect.poll(() => page.locator(".trace-tree > .trace-node").first().evaluate((node) => (node as HTMLDetailsElement).open)).toBe(true);
   await expect(page.locator(".trace-tree .address-reference").filter({ hasText: "WETHRecipient" }).first()).toBeVisible();
   await expect(page.locator(".trace-tree .address-reference").filter({ hasText: "Sender" }).first()).toBeVisible();
   await expect(page.locator(".trace-tree .address-reference").filter({ hasText: "UnmappedToken" })).toHaveCount(1);
   await expect(page.locator(".trace-tree .address-reference").filter({ hasText: "MetaAggregationRouterV2" })).toHaveCount(1);
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(flowScrollTop);
+  const helperReference = page.locator(".trace-tree .address-reference", { hasText: "0x11111111...11111111" }).first();
+  await expect(helperReference.locator(".address-reference-text")).toHaveText("0x11111111...11111111");
+  const helperAddressCard = page.getByRole("dialog", { name: "Address details" });
+  await helperReference.click();
+  await expect(helperAddressCard).toBeVisible();
+  await expect(helperAddressCard).toContainText(helper);
+  await expect(helperReference.locator(".address-reference-text")).toHaveText("0x11111111...11111111");
+  await helperReference.click();
+  await expect(helperAddressCard).toBeHidden();
   await page.getByLabel("Search trace").fill(searchOnlyAccount);
   await expect(page.locator(".trace-search-count")).toHaveText("1/1");
   await expect(page.locator(".trace-search-match")).toHaveCount(1);
@@ -218,12 +282,26 @@ test("uses configured explorer links and renders only the last main call subtree
   await page.getByLabel("Clear trace search").click();
   await expectTraceDepth(page, 1, [true, false]);
 
-  const bytesButton = page.locator(".trace-bytes-toggle").first();
+  const bytesReference = page.locator(".trace-bytes-reference").first();
+  const bytesButton = bytesReference.locator(".trace-bytes-toggle");
+  const bytesCard = page.getByRole("dialog", { name: "Bytes argument details" });
   await expect(bytesButton).toHaveText(shortBytes);
+  await bytesReference.hover();
+  await expect(bytesCard).toBeHidden();
   await bytesButton.click();
-  await expect(bytesButton).toHaveText(longBytes);
-  await bytesButton.click();
+  await expect(bytesCard).toBeVisible();
+  await expect(bytesCard).toContainText(longBytes);
   await expect(bytesButton).toHaveText(shortBytes);
+  await expectLocatorInsideViewport(page, bytesCard);
+  await bytesCard.locator("code").click();
+  await expect.poll(() => page.locator(".trace-tree > .trace-node").first().evaluate((node) => (node as HTMLDetailsElement).open)).toBe(true);
+  const bytesCopyButton = bytesCard.getByRole("button", { name: "Copy bytes argument" });
+  await expect(bytesCopyButton).toBeVisible();
+  await bytesCopyButton.click();
+  await expect(bytesButton).toHaveText(shortBytes);
+  await expect.poll(() => page.locator(".trace-tree > .trace-node").first().evaluate((node) => (node as HTMLDetailsElement).open)).toBe(true);
+  await bytesButton.click();
+  await expect(bytesCard).toBeHidden();
 
   await page.getByLabel("Trace expand depth").fill("2");
   await expectTraceDepth(page, 2, [true, true]);
@@ -266,7 +344,9 @@ async function expectAddressTooltipStaysOpen(page: Page, label: string, address:
   const reference = page.locator(".address-reference").filter({ hasText: label }).first();
   await reference.hover();
 
-  const card = reference.locator(".address-reference-card");
+  const card = page.getByRole("dialog", { name: "Address details" });
+  await expect(card).toBeHidden();
+  await reference.click();
   await expect(card).toBeVisible();
   await expect(card.locator(".address-reference-card-row")).toHaveCSS("flex-wrap", "nowrap");
   await expect(card.locator(`a[href="${explorerURL}/address/${address}"]`)).toHaveText(address);
@@ -279,6 +359,8 @@ async function expectAddressTooltipStaysOpen(page: Page, label: string, address:
   await expectLocatorInsideViewport(page, card);
   await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2, { steps: 8 });
   await expect(card).toBeVisible();
+  await reference.click();
+  await expect(card).toBeHidden();
 }
 
 async function expectAddressTooltipClampsToViewport(page: Page, label: string, address: string) {
@@ -295,7 +377,9 @@ async function expectAddressTooltipClampsToViewport(page: Page, label: string, a
     });
     await reference.hover();
 
-    const card = reference.locator(".address-reference-card");
+    const card = page.getByRole("dialog", { name: "Address details" });
+    await expect(card).toBeHidden();
+    await reference.click();
     await expect(card).toBeVisible();
     await expect(card.locator(`a[href="${explorerURL}/address/${address}"]`)).toHaveText(address);
     await expectLocatorInsideViewport(page, card);

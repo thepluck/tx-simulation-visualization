@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useState, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { explorerAddressUrl } from "../lib/explorer";
 import { shortAddress } from "../lib/format";
 import { labelForAddress, type AddressLabels } from "../lib/labels";
+import CopyIcon from "./CopyIcon";
 import { highlightSearchText } from "./SearchHighlight";
+import { blockFloatingCardEvent, stopFloatingCardEvent, useFloatingCard } from "./useFloatingCard";
 
 type AddressReferenceProps = {
   address: string;
@@ -15,95 +18,17 @@ type AddressReferenceProps = {
 
 export default function AddressReference(props: AddressReferenceProps) {
   const [copied, setCopied] = useState(false);
-  const [isActive, setIsActive] = useState(false);
-  const [cardStyle, setCardStyle] = useState<CSSProperties>({});
-  const cardRef = useRef<HTMLSpanElement | null>(null);
-  const closeTimerRef = useRef<number | null>(null);
-  const referenceRef = useRef<HTMLSpanElement | null>(null);
+  const { cardRef, cardStyle, closeCard, isActive, keepOpenOnCardPointerDown, referenceRef, shouldCloseOnBlur, toggleCard } =
+    useFloatingCard<HTMLButtonElement, HTMLSpanElement>();
   const label = labelForAddress(props.address, props.addressLabels);
-  const display = label || props.displayLabel?.trim() || shortAddress(props.address, 8);
+  const displayOverride = label || props.displayLabel?.trim();
+  const display = displayOverride || shortAddress(props.address, 8);
   const href = explorerAddressUrl(props.explorerBaseUrl, props.address);
   const className = props.className ?? "";
 
-  const clearCloseTimer = useCallback(() => {
-    if (closeTimerRef.current !== null) {
-      window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-  }, []);
-
-  const openCard = useCallback(() => {
-    clearCloseTimer();
-    setIsActive(true);
-  }, [clearCloseTimer]);
-
-  const scheduleCloseCard = useCallback(() => {
-    clearCloseTimer();
-    closeTimerRef.current = window.setTimeout(() => {
-      setIsActive(false);
-      closeTimerRef.current = null;
-    }, 120);
-  }, [clearCloseTimer]);
-
-  const positionCard = useCallback(() => {
-    const card = cardRef.current;
-    const reference = referenceRef.current;
-    if (!card || !reference) {
-      return;
-    }
-
-    const margin = 8;
-    const gap = 6;
-    const referenceBox = reference.getBoundingClientRect();
-    const cardBox = card.getBoundingClientRect();
-    const maxWidth = Math.max(1, window.innerWidth - margin * 2);
-    const maxHeight = Math.max(1, window.innerHeight - margin * 2);
-    const cardWidth = Math.min(cardBox.width || maxWidth, maxWidth);
-    const cardHeight = Math.min(cardBox.height || maxHeight, maxHeight);
-    const maxLeft = Math.max(margin, window.innerWidth - margin - cardWidth);
-    const maxTop = Math.max(margin, window.innerHeight - margin - cardHeight);
-
-    let left = referenceBox.left;
-    if (left > maxLeft) {
-      left = maxLeft;
-    }
-    left = Math.max(margin, left);
-
-    let top = referenceBox.bottom + gap;
-    if (top > maxTop && referenceBox.top - cardHeight - gap >= margin) {
-      top = referenceBox.top - cardHeight - gap;
-    }
-    top = Math.max(margin, Math.min(top, maxTop));
-
-    setCardStyle({
-      left: `${Math.round(left)}px`,
-      maxHeight: `${maxHeight}px`,
-      maxWidth: `${maxWidth}px`,
-      top: `${Math.round(top)}px`
-    });
-  }, []);
-
-  useLayoutEffect(() => {
-    if (isActive) {
-      positionCard();
-    }
-  }, [isActive, positionCard]);
-
-  useEffect(() => {
-    if (!isActive) {
-      return;
-    }
-    window.addEventListener("resize", positionCard);
-    window.addEventListener("scroll", positionCard, true);
-    return () => {
-      window.removeEventListener("resize", positionCard);
-      window.removeEventListener("scroll", positionCard, true);
-    };
-  }, [isActive, positionCard]);
-
-  useEffect(() => clearCloseTimer, [clearCloseTimer]);
-
-  const copyAddress = async () => {
+  const copyAddress = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
     try {
       await navigator.clipboard.writeText(props.address);
       setCopied(true);
@@ -113,47 +38,69 @@ export default function AddressReference(props: AddressReferenceProps) {
     }
   };
 
+  const card = (
+    <span
+      aria-label="Address details"
+      className="address-reference-card"
+      onClick={blockFloatingCardEvent}
+      onPointerDown={keepOpenOnCardPointerDown}
+      ref={cardRef}
+      role="dialog"
+      style={cardStyle}
+    >
+      <span className="address-reference-card-row">
+        {href ? (
+          <a
+            className="address-reference-card-link"
+            href={href}
+            rel="noreferrer"
+            target="_blank"
+            onClick={stopFloatingCardEvent}
+            onPointerDown={stopFloatingCardEvent}
+          >
+            {props.address}
+          </a>
+        ) : (
+          <code>{props.address}</code>
+        )}
+        <button
+          className={`address-copy-button${copied ? " copied" : ""}`}
+          type="button"
+          aria-label={`Copy ${props.address}`}
+          title={copied ? "Copied" : "Copy address"}
+          onClick={copyAddress}
+          onPointerDown={stopFloatingCardEvent}
+        >
+          <CopyIcon />
+        </button>
+      </span>
+    </span>
+  );
+
   return (
     <span
       className={`address-reference ${isActive ? "active" : ""}`}
       onBlur={(event) => {
-        const nextTarget = event.relatedTarget;
-        if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
-          scheduleCloseCard();
+        if (shouldCloseOnBlur(event.currentTarget, event.relatedTarget)) {
+          closeCard();
         }
       }}
-      onFocus={openCard}
-      onPointerEnter={openCard}
-      onPointerLeave={scheduleCloseCard}
-      ref={referenceRef}
-      tabIndex={0}
     >
-      <span className={`address-reference-text ${className}`}>{highlightSearchText(display, props.highlightTerms)}</span>
-      <span
-        className="address-reference-card"
-        onPointerEnter={openCard}
-        onPointerLeave={scheduleCloseCard}
-        ref={cardRef}
-        role="tooltip"
-        style={cardStyle}
+      <button
+        aria-expanded={isActive}
+        aria-haspopup="dialog"
+        className="address-reference-trigger"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          toggleCard();
+        }}
+        ref={referenceRef}
+        type="button"
       >
-        <span className="address-reference-card-row">
-          {href ? (
-            <a className="address-reference-card-link" href={href} rel="noreferrer" target="_blank">
-              {props.address}
-            </a>
-          ) : (
-            <code>{props.address}</code>
-          )}
-          <button
-            className={`address-copy-button${copied ? " copied" : ""}`}
-            type="button"
-            aria-label={`Copy ${props.address}`}
-            title={copied ? "Copied" : "Copy address"}
-            onClick={copyAddress}
-          />
-        </span>
-      </span>
+        <span className={`address-reference-text ${className}`}>{highlightSearchText(display, props.highlightTerms)}</span>
+      </button>
+      {isActive ? createPortal(card, document.body) : null}
     </span>
   );
 }

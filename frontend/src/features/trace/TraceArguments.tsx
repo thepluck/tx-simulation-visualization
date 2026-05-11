@@ -1,7 +1,11 @@
 import { useState } from "react";
+import type { MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { type AddressLabels, isAddress, replaceLabelAliases } from "../../lib/labels";
 import AddressReference from "../../components/AddressReference";
+import CopyIcon from "../../components/CopyIcon";
 import { highlightSearchText } from "../../components/SearchHighlight";
+import { blockFloatingCardEvent, stopFloatingCardEvent, useFloatingCard } from "../../components/useFloatingCard";
 
 type TraceArgumentsProps = {
   addressLabels: AddressLabels;
@@ -33,7 +37,7 @@ export default function TraceArguments(props: TraceArgumentsProps) {
     <>
       {splitArgumentPieces(props.value).map((piece, index) => {
         if (piece.kind === "bytes") {
-          return <CollapsibleBytes highlightTerms={props.highlightTerms} key={`${piece.value}-${index}`} value={piece.value} />;
+          return <BytesReference highlightTerms={props.highlightTerms} key={`${piece.value}-${index}`} value={piece.value} />;
         }
         if (piece.kind === "address") {
           return (
@@ -52,23 +56,73 @@ export default function TraceArguments(props: TraceArgumentsProps) {
   );
 }
 
-function CollapsibleBytes(props: { highlightTerms?: string[]; value: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const display = expanded ? props.value : shortenBytes(props.value);
+function BytesReference(props: { highlightTerms?: string[]; value: string }) {
+  const [copied, setCopied] = useState(false);
+  const { cardRef, cardStyle, closeCard, isActive, keepOpenOnCardPointerDown, referenceRef, shouldCloseOnBlur, toggleCard } =
+    useFloatingCard<HTMLSpanElement, HTMLSpanElement>();
+  const display = shortenBytes(props.value);
+
+  const copyBytes = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(props.value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  const card = (
+    <span
+      aria-label="Bytes argument details"
+      className="trace-bytes-card"
+      onClick={blockFloatingCardEvent}
+      onPointerDown={keepOpenOnCardPointerDown}
+      ref={cardRef}
+      role="dialog"
+      style={cardStyle}
+    >
+      <code>{props.value}</code>
+      <button
+        aria-label="Copy bytes argument"
+        className={`address-copy-button${copied ? " copied" : ""}`}
+        onClick={copyBytes}
+        onPointerDown={stopFloatingCardEvent}
+        title={copied ? "Copied" : "Copy bytes"}
+        type="button"
+      >
+        <CopyIcon />
+      </button>
+    </span>
+  );
 
   return (
-    <button
-      aria-label={expanded ? "Collapse bytes argument" : "Expand bytes argument"}
-      className={`trace-bytes-toggle ${expanded ? "expanded" : ""}`}
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        setExpanded((current) => !current);
+    <span
+      className={`trace-bytes-reference ${isActive ? "active" : ""}`}
+      onBlur={(event) => {
+        if (shouldCloseOnBlur(event.currentTarget, event.relatedTarget)) {
+          closeCard();
+        }
       }}
-      type="button"
+      ref={referenceRef}
     >
-      {highlightSearchText(display, props.highlightTerms)}
-    </button>
+      <button
+        aria-expanded={isActive}
+        aria-label={isActive ? "Hide bytes argument" : "Show bytes argument"}
+        className="trace-bytes-toggle"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          toggleCard();
+        }}
+        type="button"
+      >
+        {highlightSearchText(display, props.highlightTerms)}
+      </button>
+      {isActive ? createPortal(card, document.body) : null}
+    </span>
   );
 }
 
