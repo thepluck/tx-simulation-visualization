@@ -1,15 +1,17 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-
-const apiURL = "http://127.0.0.1:8080";
-const explorerURL = "https://explorer.test";
-const token = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
-const helper = "0x1111111111111111111111111111111111111111";
-const owner = "0x0000000000000000000000000000000000000001";
-const spender = "0x0000000000000000000000000000000000000002";
-const recipient = "0x0000000000000000000000000000000000000003";
-const searchOnlyAccount = "0x0000000000000000000000000000000000000004";
-const longBytes = `0x${"a".repeat(64)}`;
-const shortBytes = "0xaaaaaaaa...aaaaaaaa";
+import {
+  apiURL,
+  explorerURL,
+  longBytes,
+  owner,
+  recipient,
+  routeBaseEndpoints,
+  searchOnlyAccount,
+  shortBytes,
+  simulateResponse,
+  spender,
+  token
+} from "./fixtures";
 
 test("shows validation errors for malformed simulation inputs", async ({ page }) => {
   await routeBaseEndpoints(page);
@@ -72,91 +74,6 @@ test("changes the running action to abort and cancels the active request", async
   await page.getByRole("button", { name: "Abort" }).click();
   await expect(page.getByText("Simulation aborted")).toBeVisible();
   await expect(page.getByRole("button", { name: "Run Simulation" })).toBeVisible();
-});
-
-test("loads a saved request by request id", async ({ page }) => {
-  await routeBaseEndpoints(page);
-  const savedRequest = {
-    chain: "mainnet",
-    blockNumber: "23000001",
-    projectPath: "/Users/test/saved-project",
-    labelOverrides: [{ account: owner, label: "SavedOwner" }],
-    erc20BalanceOverrides: [],
-    erc20ApprovalOverrides: [],
-    erc721ApprovalOverrides: [],
-    stateOverride: {
-      contractName: "SavedOverride",
-      source: "pragma solidity ^0.8.0; contract SavedOverride {}"
-    },
-    compiler: {
-      viaIR: false,
-      optimize: true,
-      optimizerRuns: 300,
-      evmVersion: "cancun",
-      revertStrings: "debug"
-    },
-    sender: spender,
-    target: token,
-    data: "0x23b872dd"
-  };
-  await page.route(`${apiURL}/requests/saved-run`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        id: "saved-run",
-        request: savedRequest,
-        response: { ...simulateResponse(), id: "saved-run", durationMillis: 22 }
-      })
-    });
-  });
-
-  await page.goto("/?requestId=saved-run");
-
-  await expect(page.getByLabel("Request ID")).toHaveValue("saved-run");
-  await expect(page.getByLabel("Block")).toHaveValue("23000001");
-  await expect(page.getByLabel("Foundry Project")).toHaveValue("/Users/test/saved-project");
-  await expect(page.getByLabel("Sender")).toHaveValue(spender);
-  await expect(page.getByLabel("Target")).toHaveValue(token);
-  await expect(page.getByLabel("Calldata")).toHaveValue("0x23b872dd");
-  await expect(page.getByText("success | 22ms | exit 0 | saved-run")).toBeVisible();
-
-  await page.getByRole("button", { name: "Override Contract" }).click();
-  await expect(page.getByLabel("Override Contract Name")).toHaveValue("SavedOverride");
-  await expect(page.getByLabel("Override Contract Source")).toHaveValue("pragma solidity ^0.8.0; contract SavedOverride {}");
-  await page.getByRole("button", { name: "Compiler" }).click();
-  await expect(page.getByLabel("Optimizer Runs")).toHaveValue("300");
-  await expect(page.getByLabel("EVM Version")).toHaveValue("cancun");
-  await expect(page.getByLabel("Revert Strings")).toHaveValue("debug");
-});
-
-test("editing the request id clears a stuck lookup", async ({ page }) => {
-  await routeBaseEndpoints(page);
-  let releaseLookup: () => void = () => {};
-  const stalledLookup = new Promise<void>((resolve) => {
-    releaseLookup = resolve;
-  });
-  await page.route(`${apiURL}/requests/stuck-run`, async (route) => {
-    await stalledLookup;
-    try {
-      await route.fulfill({
-        status: 404,
-        contentType: "application/json",
-        body: JSON.stringify({ error: "request record not found" })
-      });
-    } catch {
-      // The app aborts the request when the user edits the Request ID.
-    }
-  });
-
-  await page.goto("/");
-  await page.getByLabel("Request ID").fill("stuck-run");
-  await page.getByRole("button", { name: "Open" }).click();
-  await expect(page.getByRole("button", { name: "Opening..." })).toBeDisabled();
-
-  await page.getByLabel("Request ID").fill("saved-run");
-  await expect(page.getByRole("button", { name: "Open" })).toBeEnabled();
-  releaseLookup();
 });
 
 test("uses configured explorer links and renders only the last main call subtree", async ({ page }) => {
@@ -327,31 +244,6 @@ test("uses configured explorer links and renders only the last main call subtree
   await expectAddressTooltipClampsToViewport(page, "WETHRecipient", recipient);
 });
 
-async function routeBaseEndpoints(page: Page) {
-  await page.route(`${apiURL}/health`, async (route) => {
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
-  });
-  await page.route(`${apiURL}/chains`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        chains: ["mainnet"],
-        explorerUrls: {
-          mainnet: explorerURL
-        }
-      })
-    });
-  });
-  await page.route(`${apiURL}/projects`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ projects: ["~/Kyber/ks-dex-aggregator-sc"] })
-    });
-  });
-}
-
 async function clickOutputTab(page: Page, name: string) {
   await page.getByRole("button", { name }).evaluate((element) => {
     if (element instanceof HTMLElement) {
@@ -438,206 +330,4 @@ async function expectTraceDepth(page: Page, depth: number, expectedOpenStates: b
   for (const [index, expected] of expectedOpenStates.entries()) {
     await expect.poll(() => nodes.nth(index).evaluate((node) => (node as HTMLDetailsElement).open)).toBe(expected);
   }
-}
-
-function simulateResponse() {
-  const eventChildren = Array.from({ length: 50 }, (_, index) => ({
-    raw: `emit Transfer(from: WETHOwner: [${owner}], to: TraceRecipient: [${recipient}], value: ${index + 1})`,
-    kind: "event",
-    value: `Transfer(from: WETHOwner: [${owner}], to: TraceRecipient: [${recipient}], value: ${index + 1})`
-  }));
-  const transfers = [
-    ...Array.from({ length: 50 }, () => ({
-      token,
-      from: owner,
-      to: recipient,
-      amount: "1000000000000000000",
-      normalizedAmount: "1",
-      symbol: "WETH",
-      logoUrl: ""
-    })),
-    {
-      token,
-      from: owner,
-      to: helper,
-      amount: "1000000000000000000",
-      normalizedAmount: "1",
-      symbol: "WETH",
-      logoUrl: ""
-    },
-    {
-      token,
-      from: helper,
-      to: spender,
-      amount: "1000000000000000000",
-      normalizedAmount: "1",
-      symbol: "WETH",
-      logoUrl: ""
-    },
-    {
-      token,
-      from: spender,
-      to: recipient,
-      amount: "1000000000000000000",
-      normalizedAmount: "1",
-      symbol: "WETH",
-      logoUrl: ""
-    }
-  ];
-
-  return {
-    id: "browser-test",
-    success: true,
-    exitCode: 0,
-    durationMillis: 12,
-    trace: "mock trace",
-    structuredTrace: [
-      {
-        raw: "[1000] SimulateTxScript::run()",
-        kind: "call",
-        gas: 1000,
-        target: "SimulateTxScript",
-        function: "run",
-        children: [
-          {
-            raw: `[100] ${token}::approve(${spender}, 1000000000000000000)`,
-            kind: "call",
-            gas: 100,
-            target: token,
-            function: "approve",
-            arguments: `${spender}, 1000000000000000000`
-          },
-          {
-            raw: "[0] VM::recordLogs()",
-            kind: "call",
-            gas: 0,
-            target: "VM",
-            function: "recordLogs"
-          },
-          {
-            raw: `[0] VM::prank(Sender: [${spender}])`,
-            kind: "call",
-            gas: 0,
-            target: "VM",
-            function: "prank",
-            arguments: `Sender: [${spender}]`
-          },
-          {
-            raw: `[400] WETH9::transferFrom(srcToken: WETH9: [${token}], ${owner}, ${recipient}, 1000000000000000000)`,
-            kind: "call",
-            callType: "delegatecall",
-            gas: 400,
-            target: "WETH9",
-            function: "transferFrom",
-            arguments: `srcToken: WETH9: [${token}], ${owner}, ${recipient}, 1000000000000000000, callTarget: [${helper}], ${longBytes}`,
-            children: [
-              {
-                raw: `[40] Sender: [${spender}]::fallback()`,
-                kind: "call",
-                gas: 40,
-                target: `Sender: [${spender}]`,
-                function: "fallback"
-              },
-              {
-                raw: `[60] ${helper}::decode(${longBytes})`,
-                kind: "call",
-                callType: "staticcall",
-                gas: 60,
-                target: helper,
-                function: "decode",
-                arguments: longBytes,
-                children: [
-                  {
-                    raw: "← [Revert] helper decode failed",
-                    kind: "revert",
-                    resultType: "Revert",
-                    value: "helper decode failed"
-                  }
-                ]
-              },
-              {
-                raw: "[70] MetaAggregationRouterV2::swap()",
-                kind: "call",
-                gas: 70,
-                target: "MetaAggregationRouterV2",
-                function: "swap"
-              },
-              {
-                raw: "[75] SearchOnlyAlias::inspect()",
-                kind: "call",
-                gas: 75,
-                target: "SearchOnlyAlias",
-                function: "inspect"
-              },
-              {
-                raw: `[80] UnmappedToken::transfer(${recipient}, 1000000000000000000)`,
-                kind: "call",
-                gas: 80,
-                target: "UnmappedToken",
-                function: "transfer",
-                arguments: `${recipient}, 1000000000000000000`
-              },
-              ...eventChildren,
-              {
-                raw: "← [Stop]",
-                kind: "stop",
-                resultType: "Stop",
-                value: "← [Stop]"
-              },
-              {
-                raw: "← [Return]",
-                kind: "return"
-              }
-            ]
-          },
-          {
-            raw: "[0] VM::getRecordedLogs()",
-            kind: "call",
-            gas: 0,
-            target: "VM",
-            function: "getRecordedLogs"
-          },
-          {
-            raw: "[0] console2::log(TXSIM_LOG|0x0000000000000000000000000000000000000000|3)",
-            kind: "call",
-            gas: 0,
-            target: "console2",
-            function: "log",
-            arguments: "TXSIM_LOG|0x0000000000000000000000000000000000000000|3"
-          }
-        ]
-      }
-    ],
-    erc20Transfers: transfers,
-    balanceAnalysis: {
-      changes: [
-        {
-          user: owner,
-          token,
-          symbol: "WETH",
-          rawAmount: "-1000000000000000000",
-          amount: "-1",
-          usdValue: -3500
-        },
-        {
-          user: recipient,
-          token,
-          symbol: "WETH",
-          rawAmount: "1000000000000000000",
-          amount: "1",
-          usdValue: 3500
-        }
-      ],
-      userTotals: [
-        {
-          user: owner,
-          usdValue: -3500
-        },
-        {
-          user: recipient,
-          usdValue: 3500
-        }
-      ]
-    }
-  };
 }
