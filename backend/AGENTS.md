@@ -7,11 +7,11 @@ This folder contains the local Go HTTP server for running Foundry simulations. K
 ## Commands
 
 - `go test ./...`
-- `make lint`
+- `make lint` (required backend lint; runs `go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 run`)
 - `gofmt -w <changed-go-files>`
 - `docker compose config`
 
-`make lint` runs `golangci-lint` through `go run`, so it does not require a globally installed binary.
+`make lint` runs `golangci-lint` through `go run`, so it does not require a globally installed binary. Run it after backend changes, especially when touching error handling, `defer` cleanup, or database code.
 
 ## Conventions
 

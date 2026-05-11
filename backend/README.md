@@ -82,7 +82,7 @@ explorer_urls:
 
 Chain RPC endpoints are read from the YAML `rpc_urls` map. `explorer_urls` maps the same chain names to block explorer base URLs for frontend address links. `etherscan_api_key` is backend-side only and maps to `forge script --etherscan-api-key`; set it directly in YAML or use `${ETHERSCAN_API_KEY}`. `frontend_port` controls the Vite server when using `./dev.sh`. Set `COINGECKO_API_KEY` in `.env` if you want CoinGecko requests to include a demo API key.
 
-`project_cache_path` stores recently used Foundry project paths. Local runs default to `backend/.runs/projects.json`; Docker uses `/data/runs/projects.json`, which is persisted by the `backend-runs` volume.
+Simulation records are stored in a SQLite database at `<work_dir>/records.sqlite`. `project_cache_path` stores recently used Foundry project paths. Local runs default to `backend/.runs/projects.json`; Docker uses `/data/runs` for records and project cache data, and persists that directory with the `backend-runs` volume.
 
 `max_concurrent_runs` controls the simulation worker pool size. Each worker lazily starts one quiet Anvil fork on a distinct port, reuses it across requests, and resets it with `anvil_reset` before later runs. `anvil_bin`, `anvil_host`, and `anvil_port_start` configure the local fork processes. Keep concurrency at `1` for the safest local behavior, or raise it if your machine/RPC can handle parallel simulations.
 
@@ -167,3 +167,19 @@ Inside Docker, native project browsing is unavailable because the backend runs i
 The response includes `erc20Transfers`, parsed from ERC20-style `Transfer(from, to, value)` trace events for later fund flow graph construction. Each item contains `token`, `from`, `to`, raw `amount`, and, when metadata is available, `normalizedAmount`, `symbol`, and `logoUrl`.
 
 The response also includes `balanceAnalysis`, which aggregates ERC20 transfers into signed per-user token balance changes. It fetches token decimals and symbols from the configured chain RPC, gets current USD prices from DefiLlama and CoinGecko, and may use DexScreener only for token display metadata such as symbol/logo. Trust Wallet token logo URLs are used as a fallback when the token address can be checksummed. USD values are only calculated when both a price and token decimals are available.
+
+Each started simulation is saved in `<work_dir>/records.sqlite`. The response `id` can be used later to reload the exact request and display its previous output:
+
+```sh
+curl http://127.0.0.1:8080/requests/20260511T120000.000000000-deadbeef
+```
+
+The lookup response has this shape:
+
+```json
+{
+  "id": "20260511T120000.000000000-deadbeef",
+  "request": {},
+  "response": {}
+}
+```

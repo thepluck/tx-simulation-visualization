@@ -68,6 +68,36 @@ export const defaults: FormState = {
 
 export type UpdateForm = <K extends keyof FormState>(key: K, value: FormState[K]) => void;
 
+export function formFromRequest(request: SimulateRequest, apiUrl: string): FormState {
+  const compiler = request.compiler ?? {};
+  const stateSource = request.stateOverride?.source ?? request.stateOverrideCode ?? "";
+  const stateContractName = request.stateOverride?.contractName ?? request.stateOverrideContractName ?? "";
+  return {
+    ...defaults,
+    apiUrl,
+    chain: request.chain,
+    blockNumber: request.blockNumber,
+    projectPath: request.projectPath ?? "",
+    sender: request.sender,
+    target: request.target,
+    data: request.data,
+    labelOverrides: request.labelOverrides ?? [],
+    erc20BalanceOverrides: request.erc20BalanceOverrides ?? [],
+    erc20ApprovalOverrides: request.erc20ApprovalOverrides ?? [],
+    erc721ApprovalOverrides: request.erc721ApprovalOverrides ?? [],
+    stateContractName,
+    stateSource,
+    compilerUse: compiler.use ?? "",
+    optimizerRuns: compiler.optimizerRuns === undefined ? "" : String(compiler.optimizerRuns),
+    evmVersion: compiler.evmVersion ?? "",
+    revertStrings: compiler.revertStrings ?? "",
+    viaIR: compiler.viaIR ?? defaults.viaIR,
+    optimize: compiler.optimize ?? defaults.optimize,
+    offline: compiler.offline ?? defaults.offline,
+    noMetadata: compiler.noMetadata ?? defaults.noMetadata
+  };
+}
+
 export function buildRequest(form: FormState): SimulateRequest {
   if (!form.blockNumber.trim()) {
     throw new Error("blockNumber is required");

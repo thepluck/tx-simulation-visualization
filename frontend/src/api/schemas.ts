@@ -73,6 +73,8 @@ export const simulateRequestSchema = z.object({
   erc20ApprovalOverrides: z.array(erc20ApprovalOverrideSchema).optional(),
   erc721ApprovalOverrides: z.array(erc721ApprovalOverrideSchema).optional(),
   stateOverride: stateOverrideSchema.optional(),
+  stateOverrideCode: z.string().optional(),
+  stateOverrideContractName: z.string().optional(),
   compiler: compilerConfigSchema.optional(),
   sender: addressSchema,
   target: addressSchema,
@@ -149,6 +151,12 @@ export const simulateResponseSchema = z.object({
   error: z.string().optional()
 });
 
+export const simulationRecordSchema = z.object({
+  id: z.string(),
+  request: simulateRequestSchema,
+  response: simulateResponseSchema
+});
+
 export type LabelOverride = z.infer<typeof labelOverrideSchema>;
 export type ERC20BalanceOverride = z.infer<typeof erc20BalanceOverrideSchema>;
 export type ERC20ApprovalOverride = z.infer<typeof erc20ApprovalOverrideSchema>;
@@ -163,3 +171,4 @@ export type TokenBalanceChange = z.infer<typeof tokenBalanceChangeSchema>;
 export type UserUSDChange = z.infer<typeof userUSDChangeSchema>;
 export type BalanceAnalysis = z.infer<typeof balanceAnalysisSchema>;
 export type SimulateResponse = z.infer<typeof simulateResponseSchema>;
+export type SimulationRecord = z.infer<typeof simulationRecordSchema>;

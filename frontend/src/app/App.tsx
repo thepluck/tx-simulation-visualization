@@ -1,11 +1,12 @@
-import { FormEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchChainConfig, fetchHealth, fetchProjects, simulate } from "../api/client";
+import { fetchChainConfig, fetchHealth, fetchProjects, fetchSimulationRecord, runSimulation } from "../api/client";
 import OutputPanel from "../features/output/OutputPanel";
 import RequestForm from "../features/request/RequestForm";
 import { explorerForChain } from "../lib/explorer";
 import {
   buildRequest,
+  formFromRequest,
   type ExpandMode,
   type FormState,
   type HealthStatus,
@@ -17,6 +18,8 @@ import { buildAddressLabels } from "../lib/labels";
 import { loadPersistedUIState, savePersistedUIState } from "../lib/persistence";
 import type { SimulateRequest, SimulateResponse } from "../api/types";
 
+const requestLookupTimeoutMillis = 10_000;
+
 export default function App() {
   const queryClient = useQueryClient();
   const initialUIState = useMemo(() => loadPersistedUIState(), []);
@@ -25,11 +28,15 @@ export default function App() {
   const [requestTab, setRequestTab] = useState<RequestTab>(initialUIState.requestTab);
   const [outputView, setOutputView] = useState<OutputView>(initialUIState.outputView);
   const [response, setResponse] = useState<SimulateResponse | null>(initialUIState.response);
+  const [requestLookupId, setRequestLookupId] = useState(initialUIState.response?.id ?? "");
   const [theme, setTheme] = useState<ThemeMode>(initialUIState.theme);
   const [error, setError] = useState("");
+  const [isOpeningRequest, setIsOpeningRequest] = useState(false);
   const [expandMode, setExpandMode] = useState<ExpandMode>("depth");
   const [traceExpandDepth, setTraceExpandDepth] = useState(initialUIState.traceExpandDepth);
   const simulationAbortRef = useRef<AbortController | null>(null);
+  const requestLookupAbortRef = useRef<AbortController | null>(null);
+  const loadedInitialRequestRef = useRef(false);
 
   useEffect(() => {
     savePersistedUIState({ form, outputView, requestTab, response, theme, traceExpandDepth });
@@ -83,12 +90,14 @@ export default function App() {
 
   const simulation = useMutation({
     mutationFn: ({ apiUrl, request, signal }: { apiUrl: string; request: SimulateRequest; signal: AbortSignal }) =>
-      simulate(apiUrl, request, signal),
+      runSimulation(apiUrl, request, signal),
     onSuccess: (result, variables) => {
-      setResponse(result);
-      setOutputView(result.erc20Transfers?.length ? "flow" : result.balanceAnalysis ? "balances" : "trace");
+      setResponse(result.response);
+      setRequestLookupId(result.requestId);
+      setOutputView(result.response.erc20Transfers?.length ? "flow" : result.response.balanceAnalysis ? "balances" : "trace");
       setExpandMode("depth");
       setOptimisticProjects([]);
+      syncRequestIdToURL(result.requestId);
       void queryClient.invalidateQueries({ queryKey: ["projects", variables.apiUrl] });
     },
     onError: (err) => {
@@ -104,6 +113,69 @@ export default function App() {
       }
     }
   });
+
+  const openStoredRequestById = useCallback(
+    (requestId: string) => {
+      const trimmedRequestId = requestId.trim();
+      if (!trimmedRequestId || isOpeningRequest) {
+        return;
+      }
+
+      const apiUrl = form.apiUrl;
+      const controller = new AbortController();
+      let didTimeout = false;
+      const timeoutId = window.setTimeout(() => {
+        didTimeout = true;
+        controller.abort();
+      }, requestLookupTimeoutMillis);
+
+      requestLookupAbortRef.current?.abort();
+      requestLookupAbortRef.current = controller;
+      setIsOpeningRequest(true);
+      setError("");
+
+      fetchSimulationRecord(apiUrl, trimmedRequestId, controller.signal)
+        .then((record) => {
+          setForm(formFromRequest(record.request, apiUrl));
+          setResponse(record.response);
+          setRequestLookupId(record.id);
+          setOutputView(record.response.erc20Transfers?.length ? "flow" : record.response.balanceAnalysis ? "balances" : "trace");
+          setExpandMode("depth");
+          setError("");
+          syncRequestIdToURL(record.id);
+          if (record.request.projectPath) {
+            setOptimisticProjects((current) => mergeProjects([record.request.projectPath ?? ""], current).slice(0, 20));
+          }
+        })
+        .catch((err) => {
+          if (controller.signal.aborted && !didTimeout) {
+            return;
+          }
+          setError(didTimeout ? "Request lookup timed out" : err instanceof Error ? err.message : String(err));
+        })
+        .finally(() => {
+          window.clearTimeout(timeoutId);
+          if (requestLookupAbortRef.current === controller) {
+            requestLookupAbortRef.current = null;
+            setIsOpeningRequest(false);
+          }
+        });
+    },
+    [form.apiUrl, isOpeningRequest]
+  );
+
+  useEffect(() => {
+    if (loadedInitialRequestRef.current || typeof window === "undefined") {
+      return;
+    }
+    loadedInitialRequestRef.current = true;
+    const requestId = new URLSearchParams(window.location.search).get("requestId")?.trim();
+    if (!requestId) {
+      return;
+    }
+    setRequestLookupId(requestId);
+    openStoredRequestById(requestId);
+  }, [openStoredRequestById]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -128,6 +200,23 @@ export default function App() {
     simulationAbortRef.current?.abort();
   };
 
+  const reloadApp = () => {
+    window.location.reload();
+  };
+
+  const openStoredRequest = () => {
+    openStoredRequestById(requestLookupId);
+  };
+
+  const changeRequestLookupId = (value: string) => {
+    if (isOpeningRequest) {
+      requestLookupAbortRef.current?.abort();
+      requestLookupAbortRef.current = null;
+      setIsOpeningRequest(false);
+    }
+    setRequestLookupId(value);
+  };
+
   return (
     <main className="app-shell">
       <RequestForm
@@ -135,7 +224,9 @@ export default function App() {
         error={error}
         form={form}
         isRunning={simulation.isPending}
+        isOpeningRequest={isOpeningRequest}
         projectSuggestions={projectSuggestions}
+        requestLookupId={requestLookupId}
         requestTab={requestTab}
         status={status}
         theme={theme}
@@ -144,7 +235,10 @@ export default function App() {
           setOptimisticProjects((current) => mergeProjects([path], current).slice(0, 20));
           void queryClient.invalidateQueries({ queryKey: ["projects", form.apiUrl] });
         }}
+        onReload={reloadApp}
         onRequestTabChange={setRequestTab}
+        onRequestLookupIdChange={changeRequestLookupId}
+        onOpenRequest={openStoredRequest}
         onSubmit={submit}
         onThemeChange={setTheme}
         onUpdate={update}
@@ -180,4 +274,13 @@ function mergeProjects(primary: string[], secondary: string[]): string[] {
     merged.push(path);
   }
   return merged;
+}
+
+function syncRequestIdToURL(requestId: string) {
+  if (typeof window === "undefined" || !requestId) {
+    return;
+  }
+  const url = new URL(window.location.href);
+  url.searchParams.set("requestId", requestId);
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }

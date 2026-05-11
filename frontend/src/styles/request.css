@@ -49,6 +49,20 @@ h1 {
   line-height: 1.2;
 }
 
+.title-reload-button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font: inherit;
+  line-height: inherit;
+  text-align: left;
+}
+
+.title-reload-button:hover {
+  color: var(--accent);
+}
+
 h2 {
   font-size: 22px;
 }
@@ -130,8 +144,20 @@ button:focus-visible {
   gap: 8px;
 }
 
+.request-id-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.request-id-field input {
+  font-size: 13px;
+  font-weight: 650;
+}
+
 .browse-button,
-.history-button {
+.history-button,
+.lookup-button {
   min-width: 82px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -149,6 +175,11 @@ button:focus-visible {
 .browse-button:disabled {
   cursor: wait;
   opacity: 0.7;
+}
+
+.lookup-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .history-button:disabled {

@@ -8,14 +8,19 @@ type RequestFormProps = {
   chains: string[];
   error: string;
   form: FormState;
+  isOpeningRequest: boolean;
   isRunning: boolean;
   projectSuggestions: string[];
+  requestLookupId: string;
   requestTab: RequestTab;
   status: HealthStatus;
   theme: ThemeMode;
   onAbort: () => void;
+  onOpenRequest: () => void;
   onProjectBrowsed: (path: string) => void;
+  onReload: () => void;
   onRequestTabChange: (value: RequestTab) => void;
+  onRequestLookupIdChange: (value: string) => void;
   onSubmit: FormEventHandler<HTMLFormElement>;
   onThemeChange: (value: ThemeMode) => void;
   onUpdate: UpdateForm;
@@ -26,20 +31,26 @@ export default function RequestForm(props: RequestFormProps) {
     chains,
     error,
     form,
+    isOpeningRequest,
     isRunning,
     projectSuggestions,
+    requestLookupId,
     requestTab,
     status,
     theme,
     onAbort,
+    onOpenRequest,
     onProjectBrowsed,
+    onReload,
     onRequestTabChange,
+    onRequestLookupIdChange,
     onSubmit,
     onThemeChange,
     onUpdate
   } = props;
   const [browseError, setBrowseError] = useState("");
   const [isBrowsingProject, setIsBrowsingProject] = useState(false);
+  const isRequestLookupDisabled = isRunning || isOpeningRequest || !requestLookupId.trim();
 
   const handleBrowseProject = async () => {
     setBrowseError("");
@@ -58,7 +69,11 @@ export default function RequestForm(props: RequestFormProps) {
   return (
     <section className="control-panel" aria-label="Simulation request">
       <div className="panel-header">
-        <h1>Foundry Tx Simulator</h1>
+        <h1>
+          <button aria-label="Reload Foundry Tx Simulator" className="title-reload-button" title="Reload" type="button" onClick={onReload}>
+            Foundry Tx Simulator
+          </button>
+        </h1>
         <div className="panel-header-actions">
           <button
             aria-label={theme === "dark" ? "Use light theme" : "Use dark theme"}
@@ -77,6 +92,35 @@ export default function RequestForm(props: RequestFormProps) {
           API URL
           <input value={form.apiUrl} onChange={(event) => onUpdate("apiUrl", event.target.value)} />
         </label>
+
+        <div className="field-block">
+          <label htmlFor="request-id">Request ID</label>
+          <span className="request-id-field">
+            <input
+              id="request-id"
+              value={requestLookupId}
+              placeholder="20260511T120000.000000000-deadbeef"
+              onChange={(event) => onRequestLookupIdChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  if (isRequestLookupDisabled) {
+                    return;
+                  }
+                  onOpenRequest();
+                }
+              }}
+            />
+            <button
+              className="lookup-button"
+              type="button"
+              disabled={isRequestLookupDisabled}
+              onClick={onOpenRequest}
+            >
+              {isOpeningRequest ? "Opening..." : "Open"}
+            </button>
+          </span>
+        </div>
 
         <div className="two-col">
           <label>

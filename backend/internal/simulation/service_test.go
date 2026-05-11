@@ -364,6 +364,105 @@ func TestSimulateExternalProjectBuildsSrcCompilesOverrideAndRunsCopiedScript(t *
 	}
 }
 
+func TestSimulatePersistsRequestRecord(t *testing.T) {
+	repoRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoRoot, "contracts", "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	scriptSource := []byte("// SPDX-License-Identifier: UNLICENSED\npragma solidity ^0.8.0;\ncontract SimulateTxScript {}\n")
+	if err := os.WriteFile(filepath.Join(repoRoot, "contracts", "src", "SimulateTx.s.sol"), scriptSource, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.Config{
+		ListenAddr:     "127.0.0.1:0",
+		RepoRoot:       repoRoot,
+		WorkDir:        filepath.Join(t.TempDir(), "runs"),
+		TimeoutSeconds: 30,
+		MaxConcurrent:  1,
+		ForgeBin:       "forge",
+		RPCURLs: map[string]string{
+			"mainnet": "http://127.0.0.1:8545",
+		},
+	}
+	fake := &fakeForgeRunner{
+		results: []forge.Result{
+			{Stdout: "Traces:\n  [1] SimulateTxScript::run()\n"},
+		},
+	}
+	service := NewService(cfg)
+	t.Cleanup(service.Close)
+	service.forge = fake
+	setFakeAnvilWorker(service, "http://127.0.0.1:19002")
+
+	resp, status := service.Simulate(context.Background(), model.SimulateRequest{
+		Chain:       "mainnet",
+		BlockNumber: "1",
+		Sender:      "0x0000000000000000000000000000000000000001",
+		Target:      "0x0000000000000000000000000000000000000002",
+		Data:        "0x",
+	})
+
+	if status != http.StatusOK || !resp.Success {
+		t.Fatalf("simulation failed: status=%d resp=%#v", status, resp)
+	}
+	record, err := service.LoadRecord(resp.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.ID != resp.ID || record.Response.ID != resp.ID {
+		t.Fatalf("unexpected record IDs: %#v", record)
+	}
+	if record.Request.BlockNumber != "1" || record.Request.Sender != "0x0000000000000000000000000000000000000001" {
+		t.Fatalf("unexpected saved request: %#v", record.Request)
+	}
+	if record.Request.LabelOverrides[0].Label != "Sender" {
+		t.Fatalf("saved request should include normalized sender label: %#v", record.Request.LabelOverrides)
+	}
+	if _, err := os.Stat(filepath.Join(cfg.WorkDir, recordDatabaseFile)); err != nil {
+		t.Fatalf("record database was not created: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(cfg.WorkDir, resp.ID)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("unexpected per-request record directory: %v", err)
+	}
+}
+
+func TestSimulateDoesNotPersistRecordWhenWorkerUnavailable(t *testing.T) {
+	workDir := filepath.Join(t.TempDir(), "runs")
+	service := NewService(config.Config{
+		WorkDir:        workDir,
+		TimeoutSeconds: 0,
+		MaxConcurrent:  1,
+		RPCURLs: map[string]string{
+			"mainnet": "http://127.0.0.1:8545",
+		},
+	})
+	t.Cleanup(service.Close)
+	service.workers = make(chan *simulationWorker)
+
+	resp, status := service.Simulate(context.Background(), model.SimulateRequest{
+		Chain:       "mainnet",
+		BlockNumber: "1",
+		Sender:      "0x0000000000000000000000000000000000000001",
+		Target:      "0x0000000000000000000000000000000000000002",
+		Data:        "0x",
+	})
+
+	if status != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want %d: %#v", status, http.StatusTooManyRequests, resp)
+	}
+	if resp.RunDir != "" {
+		t.Fatalf("RunDir = %q, want empty for an unstarted run", resp.RunDir)
+	}
+	entries, err := os.ReadDir(workDir)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("unexpected persisted records for unstarted run: %#v", entries)
+	}
+}
+
 func TestNormalizeProjectPathResolvesMountedProjectRoot(t *testing.T) {
 	workspaceRoot := t.TempDir()
 	projectRoot := filepath.Join(workspaceRoot, "ks-dex-aggregator-sc")

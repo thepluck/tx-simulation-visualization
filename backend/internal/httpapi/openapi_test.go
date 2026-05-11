@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"foundry-tx-simulator/backend/internal/config"
+	"foundry-tx-simulator/backend/internal/model"
 )
 
 func TestOpenAPIEndpoint(t *testing.T) {
@@ -38,6 +39,9 @@ func TestOpenAPIEndpoint(t *testing.T) {
 	if _, ok := paths["/projects"]; !ok {
 		t.Fatalf("missing /projects path: %#v", paths)
 	}
+	if _, ok := paths["/requests/{id}"]; !ok {
+		t.Fatalf("missing /requests/{id} path: %#v", paths)
+	}
 	components, ok := spec["components"].(map[string]any)
 	if !ok {
 		t.Fatalf("missing components in spec: %#v", spec)
@@ -48,6 +52,9 @@ func TestOpenAPIEndpoint(t *testing.T) {
 	}
 	if _, ok := schemas["CompilerConfig"]; !ok {
 		t.Fatalf("missing CompilerConfig schema: %#v", schemas)
+	}
+	if _, ok := schemas["SimulationRecord"]; !ok {
+		t.Fatalf("missing SimulationRecord schema: %#v", schemas)
 	}
 	simulateRequest, ok := schemas["SimulateRequest"].(map[string]any)
 	if !ok {
@@ -162,6 +169,68 @@ func TestProjectsEndpoint(t *testing.T) {
 		if projects[i] != want[i] {
 			t.Fatalf("projects = %#v, want %#v", projects, want)
 		}
+	}
+}
+
+func TestRequestRecordEndpoint(t *testing.T) {
+	cfg := testConfig(t)
+	server := NewServer(cfg, "")
+	id := "20260511T120000.000000000-deadbeef"
+	err := server.simulator.SaveRecord(model.SimulateRequest{
+		Chain:       "mainnet",
+		BlockNumber: "123",
+		Sender:      "0x0000000000000000000000000000000000000001",
+		Target:      "0x0000000000000000000000000000000000000002",
+		Data:        "0x",
+	}, model.SimulateResponse{
+		ID:             id,
+		Success:        true,
+		ExitCode:       0,
+		DurationMillis: 12,
+		Trace:          "mock trace",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/requests/"+id, nil)
+	rec := httptest.NewRecorder()
+
+	server.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var payload model.SimulationRecord
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.ID != id || payload.Request.BlockNumber != "123" || payload.Response.ID != id {
+		t.Fatalf("unexpected record: %#v", payload)
+	}
+}
+
+func TestRequestRecordEndpointRejectsUnsafeID(t *testing.T) {
+	server := NewServer(testConfig(t), "")
+	req := httptest.NewRequest(http.MethodGet, "/requests/bad\\id", nil)
+	rec := httptest.NewRecorder()
+
+	server.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+func TestRequestRecordEndpointReturnsNotFound(t *testing.T) {
+	server := NewServer(testConfig(t), "")
+	req := httptest.NewRequest(http.MethodGet, "/requests/20260511T120000.000000000-missing", nil)
+	rec := httptest.NewRecorder()
+
+	server.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusNotFound, rec.Body.String())
 	}
 }
 
