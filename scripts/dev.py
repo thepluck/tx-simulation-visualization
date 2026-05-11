@@ -118,8 +118,41 @@ def read_listen_addr(config_path: Path) -> str:
     for line in config_path.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
         if not line.startswith((" ", "\t")) and stripped.startswith("listen_addr:"):
-            return stripped.split(":", 1)[1].strip().strip("\"'")
+            return parse_yaml_scalar(stripped.split(":", 1)[1])
     return f"{DEFAULT_HOST}:{DEFAULT_BACKEND_PORT}"
+
+
+def parse_yaml_scalar(value: str) -> str:
+    value = strip_yaml_comment(value).strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
+
+
+def strip_yaml_comment(value: str) -> str:
+    quote = ""
+    escaped = False
+    for index, char in enumerate(value):
+        if quote == '"':
+            if escaped:
+                escaped = False
+                continue
+            if char == "\\":
+                escaped = True
+                continue
+            if char == quote:
+                quote = ""
+            continue
+        if quote == "'":
+            if char == quote:
+                quote = ""
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            continue
+        if char == "#" and (index == 0 or value[index - 1].isspace()):
+            return value[:index]
+    return value
 
 
 def parse_listen_addr(value: str) -> tuple[str, int]:
