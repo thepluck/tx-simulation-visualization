@@ -57,6 +57,38 @@ test("loads a saved request by request id", async ({ page }) => {
   await expect(page.getByLabel("Revert Strings")).toHaveValue("debug");
 });
 
+test("loads legacy state override fields from a saved request", async ({ page }) => {
+  await routeBaseEndpoints(page);
+  await page.route(`${apiURL}/requests/legacy-override-run`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "legacy-override-run",
+        request: {
+          chain: "mainnet",
+          blockNumber: "23000001",
+          erc20BalanceOverrides: [],
+          erc20ApprovalOverrides: [],
+          erc721ApprovalOverrides: [],
+          stateOverrideCode: "pragma solidity ^0.8.0; contract LegacyOverride {}",
+          stateOverrideContractName: "LegacyOverride",
+          sender: spender,
+          target: token,
+          data: "0x23b872dd"
+        },
+        response: { ...simulateResponse(), id: "legacy-override-run", durationMillis: 22 }
+      })
+    });
+  });
+
+  await page.goto("/?requestId=legacy-override-run");
+  await page.getByRole("button", { name: "Override Contract" }).click();
+
+  await expect(page.getByLabel("Override Contract Name")).toHaveValue("LegacyOverride");
+  await expect(page.getByLabel("Override Contract Source")).toHaveValue("pragma solidity ^0.8.0; contract LegacyOverride {}");
+});
+
 test("editing the request id clears a stuck lookup", async ({ page }) => {
   await routeBaseEndpoints(page);
   let releaseLookup: () => void = () => {};

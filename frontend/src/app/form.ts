@@ -70,6 +70,8 @@ export type UpdateForm = <K extends keyof FormState>(key: K, value: FormState[K]
 
 export function formFromRequest(request: SimulateRequest, apiUrl: string): FormState {
   const compiler = request.compiler ?? {};
+  const stateSource = request.stateOverride?.source ?? request.stateOverrideCode ?? "";
+  const stateContractName = request.stateOverride?.contractName ?? request.stateOverrideContractName ?? "";
   return {
     ...defaults,
     apiUrl,
@@ -83,8 +85,8 @@ export function formFromRequest(request: SimulateRequest, apiUrl: string): FormS
     erc20BalanceOverrides: request.erc20BalanceOverrides ?? [],
     erc20ApprovalOverrides: request.erc20ApprovalOverrides ?? [],
     erc721ApprovalOverrides: request.erc721ApprovalOverrides ?? [],
-    stateContractName: request.stateOverride?.contractName ?? "",
-    stateSource: request.stateOverride?.source ?? "",
+    stateContractName,
+    stateSource,
     compilerUse: compiler.use ?? "",
     optimizerRuns: compiler.optimizerRuns === undefined ? "" : String(compiler.optimizerRuns),
     evmVersion: compiler.evmVersion ?? "",

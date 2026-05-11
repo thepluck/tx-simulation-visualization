@@ -175,14 +175,6 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 	source, contractName := req.StateOverrideSourceAndName()
 	hasStateOverride := strings.TrimSpace(source) != ""
 
-	runDir := filepath.Join(s.cfg.WorkDir, runID)
-	if err := os.MkdirAll(runDir, 0o755); err != nil {
-		resp.Error = "create run directory: " + err.Error()
-		return finish(http.StatusInternalServerError)
-	}
-	resp.RunDir = runDir
-	slog.Info("simulation run directory ready", "run_id", runID, "run_dir", runDir)
-
 	slog.Info(
 		"simulation started",
 		"run_id", runID,
@@ -216,6 +208,14 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 		release()
 		slog.Info("simulation worker released", "run_id", runID, "worker_id", worker.id)
 	}()
+
+	runDir := filepath.Join(s.cfg.WorkDir, runID)
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		resp.Error = "create run directory: " + err.Error()
+		return finish(http.StatusInternalServerError)
+	}
+	resp.RunDir = runDir
+	slog.Info("simulation run directory ready", "run_id", runID, "run_dir", runDir)
 
 	execution, err := s.prepareFoundryExecution(&req, runID)
 	if err != nil {

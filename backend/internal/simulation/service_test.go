@@ -421,6 +421,42 @@ func TestSimulatePersistsRequestRecord(t *testing.T) {
 	}
 }
 
+func TestSimulateDoesNotPersistRecordWhenWorkerUnavailable(t *testing.T) {
+	workDir := filepath.Join(t.TempDir(), "runs")
+	service := NewService(config.Config{
+		WorkDir:        workDir,
+		TimeoutSeconds: 0,
+		MaxConcurrent:  1,
+		RPCURLs: map[string]string{
+			"mainnet": "http://127.0.0.1:8545",
+		},
+	})
+	t.Cleanup(service.Close)
+	service.workers = make(chan *simulationWorker)
+
+	resp, status := service.Simulate(context.Background(), model.SimulateRequest{
+		Chain:       "mainnet",
+		BlockNumber: "1",
+		Sender:      "0x0000000000000000000000000000000000000001",
+		Target:      "0x0000000000000000000000000000000000000002",
+		Data:        "0x",
+	})
+
+	if status != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want %d: %#v", status, http.StatusTooManyRequests, resp)
+	}
+	if resp.RunDir != "" {
+		t.Fatalf("RunDir = %q, want empty for an unstarted run", resp.RunDir)
+	}
+	entries, err := os.ReadDir(workDir)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("unexpected persisted records for unstarted run: %#v", entries)
+	}
+}
+
 func TestNormalizeProjectPathResolvesMountedProjectRoot(t *testing.T) {
 	workspaceRoot := t.TempDir()
 	projectRoot := filepath.Join(workspaceRoot, "ks-dex-aggregator-sc")
