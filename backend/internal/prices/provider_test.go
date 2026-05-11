@@ -49,12 +49,17 @@ func TestMultiProviderAppliesStablecoinFallback(t *testing.T) {
 }
 
 func TestFetchJSONConfiguresAndDecodesRequest(t *testing.T) {
+	type observedRequest struct {
+		token  string
+		apiKey string
+	}
+	requests := make(chan observedRequest, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.URL.Query().Get("token"); got != "0xabc" {
-			t.Fatalf("token query = %s, want 0xabc", got)
-		}
-		if got := r.Header.Get("x-test-key"); got != "test-key" {
-			t.Fatalf("x-test-key header = %s, want test-key", got)
+		select {
+		case requests <- observedRequest{token: r.URL.Query().Get("token"), apiKey: r.Header.Get("x-test-key")}:
+		default:
+			http.Error(w, "unexpected duplicate request", http.StatusInternalServerError)
+			return
 		}
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
@@ -71,6 +76,13 @@ func TestFetchJSONConfiguresAndDecodesRequest(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	got := <-requests
+	if got.token != "0xabc" {
+		t.Fatalf("token query = %s, want 0xabc", got.token)
+	}
+	if got.apiKey != "test-key" {
+		t.Fatalf("x-test-key header = %s, want test-key", got.apiKey)
 	}
 	if !payload.OK {
 		t.Fatalf("payload.OK = false, want true")

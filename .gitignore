@@ -14,11 +14,10 @@ docs/
 # Dotenv file
 .env
 
-# Backend local config and generated request artifacts
-backend/config.json
-backend/config.yaml
-backend/config.yml
-backend/.dev-config-*.yml
+# Local config and generated request artifacts
+config.json
+config.yaml
+config.yml
 backend/.runs/
 
 # Frontend generated artifacts

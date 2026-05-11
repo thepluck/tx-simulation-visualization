@@ -29,7 +29,7 @@ Override the Docker host port with `TXSIM_FRONTEND_PORT`:
 TXSIM_FRONTEND_PORT=15173 docker compose up --build frontend
 ```
 
-Override the local Vite dev server port with the same variable:
+When using `./dev.sh`, set the local Vite dev server port with `frontend_port` in repo-root `config.yml`. When running `yarn dev` directly from this folder, override the port with:
 
 ```bash
 TXSIM_FRONTEND_PORT=15173 yarn dev

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -55,6 +56,65 @@ explorer_urls:
 	}
 }
 
+func TestResolveConfigPathPrefersRootConfigFromRepoRoot(t *testing.T) {
+	rootDir := t.TempDir()
+	rootConfig := filepath.Join(rootDir, "config.yml")
+	if err := os.WriteFile(rootConfig, []byte("rpc_urls: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ResolveConfigPath(rootDir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != rootConfig {
+		t.Fatalf("config path = %q, want root config %q", got, rootConfig)
+	}
+}
+
+func TestResolveConfigPathFindsRootConfigFromBackendWorkingDirectory(t *testing.T) {
+	rootDir := t.TempDir()
+	backendDir := filepath.Join(rootDir, "backend")
+	if err := os.Mkdir(backendDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rootConfig := filepath.Join(rootDir, "config.yml")
+	if err := os.WriteFile(rootConfig, []byte("rpc_urls: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(backendDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(oldDir)
+	})
+
+	got, err := ResolveConfigPath("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "../config.yml" {
+		t.Fatalf("config path = %q, want parent root config candidate", got)
+	}
+}
+
+func TestResolveConfigPathReportsAcceptedConfigNames(t *testing.T) {
+	_, err := ResolveConfigPath(t.TempDir(), "")
+	if err == nil {
+		t.Fatal("ResolveConfigPath succeeded, want error")
+	}
+	for _, want := range []string{"config.yml", "config.yaml", "config.example.yml", "config.example.yaml"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want it to mention %q", err.Error(), want)
+		}
+	}
+}
+
 func TestLoadUsesListenAddressFromConfigDespiteEnv(t *testing.T) {
 	configDir := t.TempDir()
 	configPath := filepath.Join(configDir, "config.yaml")
@@ -87,6 +147,7 @@ func TestLoadUsesConfigValuesDespiteEnv(t *testing.T) {
 
 	t.Setenv("TXSIM_CONFIG", configPath)
 	t.Setenv("TXSIM_LISTEN_ADDR", "127.0.0.1:9090")
+	t.Setenv("TXSIM_FRONTEND_PORT", "15173")
 	t.Setenv("TXSIM_WORK_DIR", workDir)
 	t.Setenv("TXSIM_TIMEOUT_SECONDS", "9")
 	t.Setenv("TXSIM_MAX_CONCURRENT_RUNS", "3")
@@ -99,6 +160,7 @@ func TestLoadUsesConfigValuesDespiteEnv(t *testing.T) {
 	t.Setenv("MAINNET_EXPLORER_URL", "https://explorer.env/")
 
 	data := []byte(`listen_addr: "127.0.0.1:8080"
+frontend_port: 5174
 repo_root: "."
 work_dir: "config-runs"
 timeout_seconds: 1
@@ -123,6 +185,9 @@ explorer_urls:
 	}
 	if cfg.ListenAddr != "127.0.0.1:8080" {
 		t.Fatalf("listen addr = %q, want config value", cfg.ListenAddr)
+	}
+	if cfg.FrontendPort != 5174 {
+		t.Fatalf("frontend port = %d, want config value", cfg.FrontendPort)
 	}
 	if cfg.WorkDir != filepath.Join(configDir, "config-runs") {
 		t.Fatalf("work dir = %q, want config value", cfg.WorkDir)
@@ -269,13 +334,16 @@ func TestLoadUsesViperDefaults(t *testing.T) {
 	if cfg.ListenAddr != "127.0.0.1:8080" {
 		t.Fatalf("listen addr = %q, want viper default", cfg.ListenAddr)
 	}
-	if cfg.RepoRoot != filepath.Join(configDir, "..") {
+	if cfg.FrontendPort != 5173 {
+		t.Fatalf("frontend port = %d, want viper default", cfg.FrontendPort)
+	}
+	if cfg.RepoRoot != configDir {
 		t.Fatalf("repo root = %q, want viper default normalized", cfg.RepoRoot)
 	}
-	if cfg.WorkDir != filepath.Join(configDir, ".runs") {
+	if cfg.WorkDir != filepath.Join(configDir, "backend", ".runs") {
 		t.Fatalf("work dir = %q, want viper default normalized", cfg.WorkDir)
 	}
-	if cfg.ProjectCachePath != filepath.Join(configDir, ".runs", "projects.json") {
+	if cfg.ProjectCachePath != filepath.Join(configDir, "backend", ".runs", "projects.json") {
 		t.Fatalf("project cache path = %q, want default under work dir", cfg.ProjectCachePath)
 	}
 	if cfg.TimeoutSeconds != 300 {
