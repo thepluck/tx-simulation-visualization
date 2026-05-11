@@ -422,7 +422,7 @@ func loadTestConfig(t *testing.T) config.Config {
 	t.Helper()
 
 	oldConfigPath, hadConfigPath := os.LookupEnv("TXSIM_CONFIG")
-	configPath := filepath.Clean(filepath.Join("..", "..", "config.example.yaml"))
+	configPath := filepath.Clean(filepath.Join("..", "..", "..", "config.example.yaml"))
 	if err := os.Setenv("TXSIM_CONFIG", configPath); err != nil {
 		t.Fatal(err)
 	}

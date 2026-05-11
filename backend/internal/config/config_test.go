@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -55,7 +56,66 @@ explorer_urls:
 	}
 }
 
-func TestLoadAllowsListenAddressEnvOverride(t *testing.T) {
+func TestResolveConfigPathPrefersRootConfigFromRepoRoot(t *testing.T) {
+	rootDir := t.TempDir()
+	rootConfig := filepath.Join(rootDir, "config.yml")
+	if err := os.WriteFile(rootConfig, []byte("rpc_urls: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ResolveConfigPath(rootDir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != rootConfig {
+		t.Fatalf("config path = %q, want root config %q", got, rootConfig)
+	}
+}
+
+func TestResolveConfigPathFindsRootConfigFromBackendWorkingDirectory(t *testing.T) {
+	rootDir := t.TempDir()
+	backendDir := filepath.Join(rootDir, "backend")
+	if err := os.Mkdir(backendDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rootConfig := filepath.Join(rootDir, "config.yml")
+	if err := os.WriteFile(rootConfig, []byte("rpc_urls: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(backendDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(oldDir)
+	})
+
+	got, err := ResolveConfigPath("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "../config.yml" {
+		t.Fatalf("config path = %q, want parent root config candidate", got)
+	}
+}
+
+func TestResolveConfigPathReportsAcceptedConfigNames(t *testing.T) {
+	_, err := ResolveConfigPath(t.TempDir(), "")
+	if err == nil {
+		t.Fatal("ResolveConfigPath succeeded, want error")
+	}
+	for _, want := range []string{"config.yml", "config.yaml", "config.example.yml", "config.example.yaml"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want it to mention %q", err.Error(), want)
+		}
+	}
+}
+
+func TestLoadUsesListenAddressFromConfigDespiteEnv(t *testing.T) {
 	configDir := t.TempDir()
 	configPath := filepath.Join(configDir, "config.yaml")
 
@@ -75,18 +135,19 @@ rpc_urls:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.ListenAddr != "127.0.0.1:9090" {
-		t.Fatalf("listen addr = %q, want env override", cfg.ListenAddr)
+	if cfg.ListenAddr != "127.0.0.1:8080" {
+		t.Fatalf("listen addr = %q, want config value", cfg.ListenAddr)
 	}
 }
 
-func TestLoadAllowsEnvToOverrideConfigValues(t *testing.T) {
+func TestLoadUsesConfigValuesDespiteEnv(t *testing.T) {
 	configDir := t.TempDir()
 	configPath := filepath.Join(configDir, "config.yaml")
 	workDir := filepath.Join(configDir, "env-runs")
 
 	t.Setenv("TXSIM_CONFIG", configPath)
 	t.Setenv("TXSIM_LISTEN_ADDR", "127.0.0.1:9090")
+	t.Setenv("TXSIM_FRONTEND_PORT", "15173")
 	t.Setenv("TXSIM_WORK_DIR", workDir)
 	t.Setenv("TXSIM_TIMEOUT_SECONDS", "9")
 	t.Setenv("TXSIM_MAX_CONCURRENT_RUNS", "3")
@@ -99,6 +160,7 @@ func TestLoadAllowsEnvToOverrideConfigValues(t *testing.T) {
 	t.Setenv("MAINNET_EXPLORER_URL", "https://explorer.env/")
 
 	data := []byte(`listen_addr: "127.0.0.1:8080"
+frontend_port: 5174
 repo_root: "."
 work_dir: "config-runs"
 timeout_seconds: 1
@@ -121,38 +183,41 @@ explorer_urls:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.ListenAddr != "127.0.0.1:9090" {
-		t.Fatalf("listen addr = %q, want env override", cfg.ListenAddr)
+	if cfg.ListenAddr != "127.0.0.1:8080" {
+		t.Fatalf("listen addr = %q, want config value", cfg.ListenAddr)
 	}
-	if cfg.WorkDir != workDir {
-		t.Fatalf("work dir = %q, want %q", cfg.WorkDir, workDir)
+	if cfg.FrontendPort != 5174 {
+		t.Fatalf("frontend port = %d, want config value", cfg.FrontendPort)
 	}
-	if cfg.TimeoutSeconds != 9 {
-		t.Fatalf("timeout seconds = %d, want env override", cfg.TimeoutSeconds)
+	if cfg.WorkDir != filepath.Join(configDir, "config-runs") {
+		t.Fatalf("work dir = %q, want config value", cfg.WorkDir)
 	}
-	if cfg.MaxConcurrent != 3 {
-		t.Fatalf("max concurrent = %d, want env override", cfg.MaxConcurrent)
+	if cfg.TimeoutSeconds != 1 {
+		t.Fatalf("timeout seconds = %d, want config value", cfg.TimeoutSeconds)
 	}
-	if cfg.ForgeBin != "forge-env" {
-		t.Fatalf("forge bin = %q, want env override", cfg.ForgeBin)
+	if cfg.MaxConcurrent != 1 {
+		t.Fatalf("max concurrent = %d, want config value", cfg.MaxConcurrent)
 	}
-	if cfg.AnvilBin != "anvil-env" {
-		t.Fatalf("anvil bin = %q, want env override", cfg.AnvilBin)
+	if cfg.ForgeBin != "forge-config" {
+		t.Fatalf("forge bin = %q, want config value", cfg.ForgeBin)
 	}
-	if cfg.AnvilHost != "127.0.0.2" {
-		t.Fatalf("anvil host = %q, want env override", cfg.AnvilHost)
+	if cfg.AnvilBin != "anvil-config" {
+		t.Fatalf("anvil bin = %q, want config value", cfg.AnvilBin)
 	}
-	if cfg.AnvilPortStart != 19454 {
-		t.Fatalf("anvil port start = %d, want env override", cfg.AnvilPortStart)
+	if cfg.AnvilHost != "127.0.0.1" {
+		t.Fatalf("anvil host = %q, want config value", cfg.AnvilHost)
 	}
-	if cfg.EtherscanAPIKey != "etherscan-env" {
-		t.Fatalf("etherscan api key = %q, want env override", cfg.EtherscanAPIKey)
+	if cfg.AnvilPortStart != 18545 {
+		t.Fatalf("anvil port start = %d, want config value", cfg.AnvilPortStart)
 	}
-	if cfg.RPCURLs["mainnet"] != "https://rpc.env" {
-		t.Fatalf("mainnet rpc = %q, want env override", cfg.RPCURLs["mainnet"])
+	if cfg.EtherscanAPIKey != "etherscan-config" {
+		t.Fatalf("etherscan api key = %q, want config value", cfg.EtherscanAPIKey)
 	}
-	if cfg.ExplorerURLs["mainnet"] != "https://explorer.env" {
-		t.Fatalf("mainnet explorer = %q, want env override", cfg.ExplorerURLs["mainnet"])
+	if cfg.RPCURLs["mainnet"] != "https://rpc.config" {
+		t.Fatalf("mainnet rpc = %q, want config value", cfg.RPCURLs["mainnet"])
+	}
+	if cfg.ExplorerURLs["mainnet"] != "https://explorer.config" {
+		t.Fatalf("mainnet explorer = %q, want config value", cfg.ExplorerURLs["mainnet"])
 	}
 }
 
@@ -221,11 +286,11 @@ rpc_urls:
 		t.Fatal(err)
 	}
 	if cfg.RPCURLs["mainnet"] != "https://rpc.env" {
-		t.Fatalf("mainnet rpc = %q, want existing env override", cfg.RPCURLs["mainnet"])
+		t.Fatalf("mainnet rpc = %q, want existing env placeholder value", cfg.RPCURLs["mainnet"])
 	}
 }
 
-func TestLoadReadsPlainEtherscanAPIKeyEnv(t *testing.T) {
+func TestLoadDoesNotReadPlainEtherscanAPIKeyEnvWithoutConfigPlaceholder(t *testing.T) {
 	configDir := t.TempDir()
 	configPath := filepath.Join(configDir, "config.yaml")
 
@@ -244,8 +309,8 @@ rpc_urls:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.EtherscanAPIKey != "etherscan-env" {
-		t.Fatalf("etherscan api key = %q, want plain env value", cfg.EtherscanAPIKey)
+	if cfg.EtherscanAPIKey != "" {
+		t.Fatalf("etherscan api key = %q, want empty value", cfg.EtherscanAPIKey)
 	}
 }
 
@@ -269,13 +334,16 @@ func TestLoadUsesViperDefaults(t *testing.T) {
 	if cfg.ListenAddr != "127.0.0.1:8080" {
 		t.Fatalf("listen addr = %q, want viper default", cfg.ListenAddr)
 	}
-	if cfg.RepoRoot != filepath.Join(configDir, "..") {
+	if cfg.FrontendPort != 5173 {
+		t.Fatalf("frontend port = %d, want viper default", cfg.FrontendPort)
+	}
+	if cfg.RepoRoot != configDir {
 		t.Fatalf("repo root = %q, want viper default normalized", cfg.RepoRoot)
 	}
-	if cfg.WorkDir != filepath.Join(configDir, ".runs") {
+	if cfg.WorkDir != filepath.Join(configDir, "backend", ".runs") {
 		t.Fatalf("work dir = %q, want viper default normalized", cfg.WorkDir)
 	}
-	if cfg.ProjectCachePath != filepath.Join(configDir, ".runs", "projects.json") {
+	if cfg.ProjectCachePath != filepath.Join(configDir, "backend", ".runs", "projects.json") {
 		t.Fatalf("project cache path = %q, want default under work dir", cfg.ProjectCachePath)
 	}
 	if cfg.TimeoutSeconds != 300 {

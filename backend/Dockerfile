@@ -16,11 +16,11 @@ RUN curl -L https://foundry.paradigm.xyz | bash \
   && /root/.foundry/bin/foundryup
 
 ENV PATH="/root/.foundry/bin:${PATH}"
-ENV TXSIM_CONFIG="/app/backend/config.docker.yaml"
+ENV TXSIM_CONFIG="/app/config.docker.yaml"
 
 WORKDIR /app
 COPY --from=builder /out/txsim-server /usr/local/bin/txsim-server
-COPY backend/config.docker.yaml ./backend/config.docker.yaml
+COPY config.docker.yaml ./config.docker.yaml
 COPY contracts ./contracts
 RUN mkdir -p /data/runs
 
