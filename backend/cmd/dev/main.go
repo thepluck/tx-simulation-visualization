@@ -140,11 +140,11 @@ func parseArgs(values []string) error {
 	flags := flag.NewFlagSet("dev", flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)
 	flags.Usage = func() {
-		fmt.Fprintln(flags.Output(), "Usage: ./dev.sh")
-		fmt.Fprintln(flags.Output(), "")
-		fmt.Fprintln(flags.Output(), "Run the local Foundry Tx Simulator backend and frontend together.")
-		fmt.Fprintln(flags.Output(), "")
-		fmt.Fprintln(flags.Output(), "Configure backend and frontend ports in config.yml.")
+		_, _ = fmt.Fprintln(flags.Output(), "Usage: ./dev.sh")
+		_, _ = fmt.Fprintln(flags.Output(), "")
+		_, _ = fmt.Fprintln(flags.Output(), "Run the local Foundry Tx Simulator backend and frontend together.")
+		_, _ = fmt.Fprintln(flags.Output(), "")
+		_, _ = fmt.Fprintln(flags.Output(), "Configure backend and frontend ports in config.yml.")
 	}
 	if err := flags.Parse(values); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
