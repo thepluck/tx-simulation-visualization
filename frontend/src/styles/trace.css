@@ -222,7 +222,7 @@
   z-index: 20;
   display: inline-grid;
   grid-template-columns: max-content minmax(0, 1fr) auto;
-  align-items: start;
+  align-items: baseline;
   column-gap: 6px;
   row-gap: 5px;
   width: min(520px, calc(100vw - 16px));
@@ -241,10 +241,14 @@
 
 .function-reference-card-label {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   line-height: 1.35;
   text-transform: uppercase;
+}
+
+.function-reference-card .address-copy-button {
+  align-self: center;
 }
 
 .function-reference-card code {

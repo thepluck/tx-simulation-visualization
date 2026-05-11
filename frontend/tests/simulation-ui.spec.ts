@@ -220,6 +220,8 @@ test("uses configured explorer links and renders only the last main call subtree
   await expect(functionCard.locator("code").first()).toHaveCSS("white-space", "normal");
   await expect(functionCard.locator("code").first()).toHaveCSS("overflow-wrap", "normal");
   await expect(functionCard.locator("code").first().locator("wbr")).toHaveCount(2);
+  await expect(functionCard.locator(".function-reference-card-label").first()).toHaveCSS("font-size", "13px");
+  await expect(functionCard).toHaveCSS("align-items", "baseline");
   await expect(functionCard).toContainText("transferFrom(address,address,uint256)");
   await expect(functionCard).toContainText("0x23b872dd");
   await expect(functionCard.getByRole("button", { name: "Copy function signature transferFrom(address,address,uint256)" })).toBeVisible();
