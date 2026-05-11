@@ -46,8 +46,8 @@ export async function browseProject(apiUrl: string): Promise<string> {
   return parsePayload(browseProjectResponseSchema, payload, "browse project").path;
 }
 
-export async function fetchSimulationRecord(apiUrl: string, requestId: string): Promise<SimulationRecord> {
-  const response = await fetch(`${trimSlash(apiUrl)}/requests/${encodeURIComponent(requestId.trim())}`);
+export async function fetchSimulationRecord(apiUrl: string, requestId: string, signal?: AbortSignal): Promise<SimulationRecord> {
+  const response = await fetch(`${trimSlash(apiUrl)}/requests/${encodeURIComponent(requestId.trim())}`, { signal });
   const payload = await readJSON(response);
   if (!response.ok) {
     throw new Error(errorMessage(payload, `request lookup failed: ${response.status}`));

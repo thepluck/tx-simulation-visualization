@@ -130,6 +130,35 @@ test("loads a saved request by request id", async ({ page }) => {
   await expect(page.getByLabel("Revert Strings")).toHaveValue("debug");
 });
 
+test("editing the request id clears a stuck lookup", async ({ page }) => {
+  await routeBaseEndpoints(page);
+  let releaseLookup: () => void = () => {};
+  const stalledLookup = new Promise<void>((resolve) => {
+    releaseLookup = resolve;
+  });
+  await page.route(`${apiURL}/requests/stuck-run`, async (route) => {
+    await stalledLookup;
+    try {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "request record not found" })
+      });
+    } catch {
+      // The app aborts the request when the user edits the Request ID.
+    }
+  });
+
+  await page.goto("/");
+  await page.getByLabel("Request ID").fill("stuck-run");
+  await page.getByRole("button", { name: "Open" }).click();
+  await expect(page.getByRole("button", { name: "Opening..." })).toBeDisabled();
+
+  await page.getByLabel("Request ID").fill("saved-run");
+  await expect(page.getByRole("button", { name: "Open" })).toBeEnabled();
+  releaseLookup();
+});
+
 test("uses configured explorer links and renders only the last main call subtree", async ({ page }) => {
   await routeBaseEndpoints(page);
   await page.route(`${apiURL}/simulate`, async (route) => {
