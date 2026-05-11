@@ -16,6 +16,16 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_BACKEND_PORT = 8080
 DEFAULT_FRONTEND_PORT = 5173
+CONFIG_CANDIDATES = [
+    "backend/config.yml",
+    "backend/config.yaml",
+    "backend/config.example.yaml",
+    "backend/config.example.yml",
+    "config.yml",
+    "config.yaml",
+    "config.example.yaml",
+    "config.example.yml",
+]
 COLORS = {
     "backend": "\033[36m",
     "frontend": "\033[35m",
@@ -44,8 +54,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--backend-port",
         type=parse_port,
-        default=DEFAULT_BACKEND_PORT,
-        help=f"backend port, default: {DEFAULT_BACKEND_PORT}",
+        default=None,
+        help="override backend port from backend/config.yml",
     )
     parser.add_argument(
         "--frontend-port",
@@ -55,8 +65,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--host",
-        default=DEFAULT_HOST,
-        help=f"local host for printed URLs and backend bind address, default: {DEFAULT_HOST}",
+        default=None,
+        help=f"override backend bind host from backend/config.yml, default frontend host: {DEFAULT_HOST}",
     )
     return parser.parse_args()
 
@@ -85,6 +95,80 @@ def frontend_command(host: str, port: int) -> list[str]:
 
     require_command("yarn")
     return ["yarn", "dev", *vite_args]
+
+
+def resolve_backend_config(env: dict[str, str]) -> Path:
+    configured = env.get("TXSIM_CONFIG", "").strip()
+    if configured:
+        candidate = Path(configured).expanduser()
+        if not candidate.is_absolute():
+            candidate = ROOT_DIR / candidate
+        if candidate.exists():
+            return candidate
+        raise SystemExit(f"TXSIM_CONFIG points to missing config: {candidate}")
+
+    for relative_path in CONFIG_CANDIDATES:
+        candidate = ROOT_DIR / relative_path
+        if candidate.exists():
+            return candidate
+    raise SystemExit("backend config is required; create backend/config.yml or set TXSIM_CONFIG")
+
+
+def read_listen_addr(config_path: Path) -> str:
+    for line in config_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not line.startswith((" ", "\t")) and stripped.startswith("listen_addr:"):
+            return stripped.split(":", 1)[1].strip().strip("\"'")
+    return f"{DEFAULT_HOST}:{DEFAULT_BACKEND_PORT}"
+
+
+def parse_listen_addr(value: str) -> tuple[str, int]:
+    value = value.strip().strip("\"'")
+    if not value:
+        return DEFAULT_HOST, DEFAULT_BACKEND_PORT
+    if value.startswith(":"):
+        return DEFAULT_HOST, parse_port(value[1:])
+    if value.startswith("[") and "]:" in value:
+        host, port = value.rsplit("]:", 1)
+        return host.lstrip("["), parse_port(port)
+    if ":" in value:
+        host, port = value.rsplit(":", 1)
+        return host or DEFAULT_HOST, parse_port(port)
+    return value, DEFAULT_BACKEND_PORT
+
+
+def format_listen_addr(host: str, port: int) -> str:
+    if ":" in host and not host.startswith("["):
+        return f"[{host}]:{port}"
+    return f"{host}:{port}"
+
+
+def browser_host(host: str) -> str:
+    if host in {"", "0.0.0.0", "::", "[::]"}:
+        return DEFAULT_HOST
+    return host.strip("[]")
+
+
+def write_dev_backend_config(config_path: Path, listen_addr: str) -> Path:
+    lines = config_path.read_text(encoding="utf-8").splitlines()
+    out: list[str] = []
+    replaced = False
+
+    for line in lines:
+        stripped = line.lstrip()
+        is_top_level = len(stripped) == len(line)
+        if is_top_level and stripped.startswith("listen_addr:"):
+            out.append(f'listen_addr: "{listen_addr}"')
+            replaced = True
+        else:
+            out.append(line)
+
+    if not replaced:
+        out.insert(0, f'listen_addr: "{listen_addr}"')
+
+    dev_config = config_path.parent / f".dev-config-{os.getpid()}.yml"
+    dev_config.write_text("\n".join(out) + "\n", encoding="utf-8")
+    return dev_config
 
 
 def start_process(name: str, cwd: Path, command: list[str], env: dict[str, str]) -> subprocess.Popen:
@@ -153,11 +237,22 @@ def main() -> int:
     require_command("go")
 
     env = os.environ.copy()
-    backend_addr = f"{args.host}:{args.backend_port}"
-    backend_url = f"http://{backend_addr}"
+    dev_config_path: Path | None = None
+    base_config_path = resolve_backend_config(env)
+    config_host, config_port = parse_listen_addr(read_listen_addr(base_config_path))
+    backend_host = args.host or config_host
+    backend_port = args.backend_port or config_port
+    frontend_host = args.host or DEFAULT_HOST
+    backend_addr = format_listen_addr(backend_host, backend_port)
+    backend_url = f"http://{browser_host(backend_host)}:{backend_port}"
+    should_override_config = args.host is not None or args.backend_port is not None
 
     backend_env = env.copy()
-    backend_env["TXSIM_LISTEN_ADDR"] = backend_addr
+    if should_override_config:
+        dev_config_path = write_dev_backend_config(base_config_path, backend_addr)
+        backend_env["TXSIM_CONFIG"] = str(dev_config_path)
+    else:
+        backend_env["TXSIM_CONFIG"] = str(base_config_path)
 
     frontend_env = env.copy()
     frontend_env["TXSIM_API_URL"] = backend_url
@@ -177,13 +272,13 @@ def main() -> int:
         processes["frontend"] = start_process(
             "frontend",
             ROOT_DIR / "frontend",
-            frontend_command(args.host, args.frontend_port),
+            frontend_command(frontend_host, args.frontend_port),
             frontend_env,
         )
         output_threads.append(start_output_thread("frontend", processes["frontend"]))
 
         print_status("")
-        print_status(f"Frontend: http://{args.host}:{args.frontend_port}")
+        print_status(f"Frontend: http://{frontend_host}:{args.frontend_port}")
         print_status(f"Backend:  {backend_url}")
         print_status(f"Swagger:  {backend_url}/docs")
         print_status("")
@@ -211,6 +306,12 @@ def main() -> int:
 
         for thread in output_threads:
             thread.join(timeout=1)
+
+        if dev_config_path is not None:
+            try:
+                dev_config_path.unlink()
+            except FileNotFoundError:
+                pass
 
 
 if __name__ == "__main__":

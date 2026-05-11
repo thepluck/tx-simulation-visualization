@@ -18,6 +18,7 @@ docs/
 backend/config.json
 backend/config.yaml
 backend/config.yml
+backend/.dev-config-*.yml
 backend/.runs/
 
 # Frontend generated artifacts

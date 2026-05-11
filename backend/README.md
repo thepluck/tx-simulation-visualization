@@ -32,15 +32,54 @@ Override the Docker host port with `TXSIM_BACKEND_PORT`:
 TXSIM_BACKEND_PORT=18080 docker compose up --build backend
 ```
 
-Override the local backend listen address with `TXSIM_LISTEN_ADDR`:
+Set the local backend listen address in YAML:
 
-```sh
-TXSIM_LISTEN_ADDR=127.0.0.1:18080 go run ./cmd/server
+```yaml
+listen_addr: "127.0.0.1:18080"
 ```
 
-The server loads config from `TXSIM_CONFIG` when set. Otherwise it searches for `config.yaml`, `backend/config.yaml`, `config.yml`, `backend/config.yml`, then example YAML files.
+The server loads config from `TXSIM_CONFIG` when set. Otherwise it searches from the current working directory for `config.yaml`, `config.yml`, `backend/config.yaml`, `backend/config.yml`, `config.example.yaml`, `config.example.yml`, `backend/config.example.yaml`, then `backend/config.example.yml`. Direct `go run` commands from `backend/` find `backend/config.yml` as the local `config.yml`; `scripts/dev.py` uses it by default.
 
-Use `config.example.yaml` as the starting point. The backend loads `.env` from the repo root and `backend/.env` with `gotenv`, then environment variables override config values. Top-level backend settings use `TXSIM_` names such as `TXSIM_LISTEN_ADDR`, `TXSIM_WORK_DIR`, and `TXSIM_MAX_CONCURRENT_RUNS`. Chain endpoints use the existing chain-specific names such as `MAINNET_RPC_URL`, `BASE_RPC_URL`, and `MAINNET_EXPLORER_URL`; requests only need to pass a chain name. `explorer_urls` maps the same chain names to block explorer base URLs for frontend address links. `etherscan_api_key` is backend-side only and maps to `forge script --etherscan-api-key`; set `ETHERSCAN_API_KEY` in `.env` for Etherscan API v2 across chains. Set `COINGECKO_API_KEY` in `.env` if you want CoinGecko requests to include a demo API key.
+Use `backend/config.yml` for local development or `backend/config.example.yaml` as a template for another config file. The backend loads `.env` from the repo root and `backend/.env` with `gotenv`, but environment values are only used when the YAML explicitly references them with `${...}`.
+
+Use the repo-root `.env.example` as the template for `.env`. Put secrets and machine-specific values in `.env`:
+
+```env
+MAINNET_RPC_URL=https://mainnet.example
+BASE_RPC_URL=https://base.example
+ARBITRUM_RPC_URL=https://arbitrum.example
+ETHERSCAN_API_KEY=...
+COINGECKO_API_KEY=...
+```
+
+Then reference them from YAML:
+
+```yaml
+etherscan_api_key: "${ETHERSCAN_API_KEY}"
+rpc_urls:
+  mainnet: "${MAINNET_RPC_URL}"
+```
+
+Backend runtime settings live in YAML:
+
+```yaml
+listen_addr: "127.0.0.1:8080"
+work_dir: ".runs"
+project_cache_path: ".runs/projects.json"
+timeout_seconds: 300
+max_concurrent_runs: 1
+forge_bin: "forge"
+anvil_bin: "anvil"
+anvil_host: "127.0.0.1"
+anvil_port_start: 18545
+etherscan_api_key: "${ETHERSCAN_API_KEY}"
+rpc_urls:
+  mainnet: "${MAINNET_RPC_URL}"
+explorer_urls:
+  mainnet: "https://etherscan.io"
+```
+
+Chain RPC endpoints are read from the YAML `rpc_urls` map. `explorer_urls` maps the same chain names to block explorer base URLs for frontend address links. `etherscan_api_key` is backend-side only and maps to `forge script --etherscan-api-key`; set it directly in YAML or use `${ETHERSCAN_API_KEY}`. Set `COINGECKO_API_KEY` in `.env` if you want CoinGecko requests to include a demo API key.
 
 `project_cache_path` stores recently used Foundry project paths. Local runs default to `backend/.runs/projects.json`; Docker uses `/data/runs/projects.json`, which is persisted by the `backend-runs` volume.
 

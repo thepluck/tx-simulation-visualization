@@ -55,7 +55,7 @@ explorer_urls:
 	}
 }
 
-func TestLoadAllowsListenAddressEnvOverride(t *testing.T) {
+func TestLoadUsesListenAddressFromConfigDespiteEnv(t *testing.T) {
 	configDir := t.TempDir()
 	configPath := filepath.Join(configDir, "config.yaml")
 
@@ -75,12 +75,12 @@ rpc_urls:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.ListenAddr != "127.0.0.1:9090" {
-		t.Fatalf("listen addr = %q, want env override", cfg.ListenAddr)
+	if cfg.ListenAddr != "127.0.0.1:8080" {
+		t.Fatalf("listen addr = %q, want config value", cfg.ListenAddr)
 	}
 }
 
-func TestLoadAllowsEnvToOverrideConfigValues(t *testing.T) {
+func TestLoadUsesConfigValuesDespiteEnv(t *testing.T) {
 	configDir := t.TempDir()
 	configPath := filepath.Join(configDir, "config.yaml")
 	workDir := filepath.Join(configDir, "env-runs")
@@ -121,38 +121,38 @@ explorer_urls:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.ListenAddr != "127.0.0.1:9090" {
-		t.Fatalf("listen addr = %q, want env override", cfg.ListenAddr)
+	if cfg.ListenAddr != "127.0.0.1:8080" {
+		t.Fatalf("listen addr = %q, want config value", cfg.ListenAddr)
 	}
-	if cfg.WorkDir != workDir {
-		t.Fatalf("work dir = %q, want %q", cfg.WorkDir, workDir)
+	if cfg.WorkDir != filepath.Join(configDir, "config-runs") {
+		t.Fatalf("work dir = %q, want config value", cfg.WorkDir)
 	}
-	if cfg.TimeoutSeconds != 9 {
-		t.Fatalf("timeout seconds = %d, want env override", cfg.TimeoutSeconds)
+	if cfg.TimeoutSeconds != 1 {
+		t.Fatalf("timeout seconds = %d, want config value", cfg.TimeoutSeconds)
 	}
-	if cfg.MaxConcurrent != 3 {
-		t.Fatalf("max concurrent = %d, want env override", cfg.MaxConcurrent)
+	if cfg.MaxConcurrent != 1 {
+		t.Fatalf("max concurrent = %d, want config value", cfg.MaxConcurrent)
 	}
-	if cfg.ForgeBin != "forge-env" {
-		t.Fatalf("forge bin = %q, want env override", cfg.ForgeBin)
+	if cfg.ForgeBin != "forge-config" {
+		t.Fatalf("forge bin = %q, want config value", cfg.ForgeBin)
 	}
-	if cfg.AnvilBin != "anvil-env" {
-		t.Fatalf("anvil bin = %q, want env override", cfg.AnvilBin)
+	if cfg.AnvilBin != "anvil-config" {
+		t.Fatalf("anvil bin = %q, want config value", cfg.AnvilBin)
 	}
-	if cfg.AnvilHost != "127.0.0.2" {
-		t.Fatalf("anvil host = %q, want env override", cfg.AnvilHost)
+	if cfg.AnvilHost != "127.0.0.1" {
+		t.Fatalf("anvil host = %q, want config value", cfg.AnvilHost)
 	}
-	if cfg.AnvilPortStart != 19454 {
-		t.Fatalf("anvil port start = %d, want env override", cfg.AnvilPortStart)
+	if cfg.AnvilPortStart != 18545 {
+		t.Fatalf("anvil port start = %d, want config value", cfg.AnvilPortStart)
 	}
-	if cfg.EtherscanAPIKey != "etherscan-env" {
-		t.Fatalf("etherscan api key = %q, want env override", cfg.EtherscanAPIKey)
+	if cfg.EtherscanAPIKey != "etherscan-config" {
+		t.Fatalf("etherscan api key = %q, want config value", cfg.EtherscanAPIKey)
 	}
-	if cfg.RPCURLs["mainnet"] != "https://rpc.env" {
-		t.Fatalf("mainnet rpc = %q, want env override", cfg.RPCURLs["mainnet"])
+	if cfg.RPCURLs["mainnet"] != "https://rpc.config" {
+		t.Fatalf("mainnet rpc = %q, want config value", cfg.RPCURLs["mainnet"])
 	}
-	if cfg.ExplorerURLs["mainnet"] != "https://explorer.env" {
-		t.Fatalf("mainnet explorer = %q, want env override", cfg.ExplorerURLs["mainnet"])
+	if cfg.ExplorerURLs["mainnet"] != "https://explorer.config" {
+		t.Fatalf("mainnet explorer = %q, want config value", cfg.ExplorerURLs["mainnet"])
 	}
 }
 
@@ -221,11 +221,11 @@ rpc_urls:
 		t.Fatal(err)
 	}
 	if cfg.RPCURLs["mainnet"] != "https://rpc.env" {
-		t.Fatalf("mainnet rpc = %q, want existing env override", cfg.RPCURLs["mainnet"])
+		t.Fatalf("mainnet rpc = %q, want existing env placeholder value", cfg.RPCURLs["mainnet"])
 	}
 }
 
-func TestLoadReadsPlainEtherscanAPIKeyEnv(t *testing.T) {
+func TestLoadDoesNotReadPlainEtherscanAPIKeyEnvWithoutConfigPlaceholder(t *testing.T) {
 	configDir := t.TempDir()
 	configPath := filepath.Join(configDir, "config.yaml")
 
@@ -244,8 +244,8 @@ rpc_urls:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.EtherscanAPIKey != "etherscan-env" {
-		t.Fatalf("etherscan api key = %q, want plain env value", cfg.EtherscanAPIKey)
+	if cfg.EtherscanAPIKey != "" {
+		t.Fatalf("etherscan api key = %q, want empty value", cfg.EtherscanAPIKey)
 	}
 }
 

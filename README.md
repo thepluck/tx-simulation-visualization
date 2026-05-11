@@ -2,6 +2,41 @@
 
 Local transaction simulation and visualization tooling. The backend runs Foundry scripts and returns trace, fund-flow, and balance-analysis data; the frontend provides the local UI.
 
+## Quick Start
+
+Install Go:
+
+```sh
+brew install go
+```
+
+Install Node/Yarn with Volta:
+
+```sh
+curl https://get.volta.sh | bash
+volta install node yarn
+```
+
+Install Foundry:
+
+```sh
+curl -L https://foundry.paradigm.xyz | bash
+foundryup
+```
+
+Create local config files from examples:
+
+```sh
+cp .env.example .env
+cp backend/config.example.yaml backend/config.yml
+```
+
+Fill in RPC URLs in `.env`, then start both servers:
+
+```sh
+python3 scripts/dev.py
+```
+
 ## Local Run
 
 Run the backend and frontend together:
@@ -37,15 +72,50 @@ When run directly, the local frontend defaults to `http://127.0.0.1:8080` for th
 
 ## Configuration
 
-Both local and Docker deployments can read `.env` values for `MAINNET_RPC_URL`, `BASE_RPC_URL`, `ARBITRUM_RPC_URL`, optional `ETHERSCAN_API_KEY`, and optional `COINGECKO_API_KEY`. Backend environment variables override YAML config values: use `TXSIM_` names for top-level backend settings and chain-specific names such as `MAINNET_RPC_URL` for RPC endpoints.
+Backend settings are read from YAML config. `backend/config.yml` is the local config, and `backend/config.example.yaml` is the template for new configs. `scripts/dev.py` uses `backend/config.yml` by default; direct backend runs from `backend/` find it automatically.
 
-Use `TXSIM_LISTEN_ADDR` for the local backend bind address, `TXSIM_FRONTEND_PORT` for the Vite frontend port, and `TXSIM_API_URL` when the browser should call a specific backend URL.
+```yaml
+listen_addr: "127.0.0.1:8080"
+work_dir: ".runs"
+anvil_port_start: 18545
+rpc_urls:
+  mainnet: "${MAINNET_RPC_URL}"
+```
+
+Set `TXSIM_CONFIG` only when you want to use a different YAML file:
+
+```sh
+cd backend
+TXSIM_CONFIG=/path/to/config.yml go run ./cmd/server
+```
+
+The backend loads `.env` from the repo root and `backend/.env`, but environment values are only used when the YAML explicitly references them with `${...}`. For example, `MAINNET_RPC_URL` is read because `backend/config.yml` uses `${MAINNET_RPC_URL}` under `rpc_urls`; a plain `MAINNET_RPC_URL` environment variable does not override a literal YAML URL.
+
+Use `.env.example` as the template for `.env`. Put secrets and machine-specific values in `.env`:
+
+```env
+MAINNET_RPC_URL=https://mainnet.example
+BASE_RPC_URL=https://base.example
+ARBITRUM_RPC_URL=https://arbitrum.example
+ETHERSCAN_API_KEY=...
+COINGECKO_API_KEY=...
+```
+
+Then reference them from YAML:
+
+```yaml
+etherscan_api_key: "${ETHERSCAN_API_KEY}"
+rpc_urls:
+  mainnet: "${MAINNET_RPC_URL}"
+```
+
+Use YAML fields such as `listen_addr`, `work_dir`, `max_concurrent_runs`, `anvil_port_start`, `rpc_urls`, `explorer_urls`, and `etherscan_api_key` for backend settings. Use `TXSIM_FRONTEND_PORT` for the Vite frontend port and `TXSIM_API_URL` when the browser should call a specific backend URL. `scripts/dev.py --backend-port` writes a temporary YAML config so local port args keep working without backend env overrides.
 
 For local deployment without Docker:
 
 ```sh
-(cd backend && TXSIM_LISTEN_ADDR=127.0.0.1:18080 go run ./cmd/server)
-(cd frontend && TXSIM_FRONTEND_PORT=15173 TXSIM_API_URL=http://127.0.0.1:18080 yarn dev)
+(cd backend && go run ./cmd/server)
+(cd frontend && TXSIM_FRONTEND_PORT=15173 TXSIM_API_URL=http://127.0.0.1:8080 yarn dev)
 ```
 
 Local deployment stores recently used Foundry project paths in `backend/.runs/projects.json` by default.

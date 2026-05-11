@@ -29,12 +29,12 @@ type Config struct {
 
 var configCandidates = []string{
 	"config.yaml",
-	"backend/config.yaml",
 	"config.yml",
+	"backend/config.yaml",
 	"backend/config.yml",
 	"config.example.yaml",
-	"backend/config.example.yaml",
 	"config.example.yml",
+	"backend/config.example.yaml",
 	"backend/config.example.yml",
 }
 
@@ -98,9 +98,6 @@ func Load() (Config, string, error) {
 	cfg.AnvilBin = strings.TrimSpace(cfg.AnvilBin)
 	cfg.AnvilHost = strings.TrimSpace(cfg.AnvilHost)
 	cfg.EtherscanAPIKey = strings.TrimSpace(os.ExpandEnv(cfg.EtherscanAPIKey))
-	if cfg.EtherscanAPIKey == "" {
-		cfg.EtherscanAPIKey = strings.TrimSpace(os.Getenv("ETHERSCAN_API_KEY"))
-	}
 	if cfg.AnvilPortStart < 0 {
 		return Config{}, "", errors.New("anvil_port_start must be positive")
 	}
@@ -130,7 +127,7 @@ func resolveConfigPath() (string, error) {
 			return candidate, nil
 		}
 	}
-	return "", errors.New("set TXSIM_CONFIG or create backend/config.yaml")
+	return "", errors.New("set TXSIM_CONFIG or create backend/config.yml")
 }
 
 func newConfigViper(path string) *viper.Viper {
@@ -146,25 +143,6 @@ func newConfigViper(path string) *viper.Viper {
 	v.SetDefault("anvil_host", "127.0.0.1")
 	v.SetDefault("anvil_port_start", 18545)
 	v.SetDefault("etherscan_api_key", "")
-	v.SetEnvPrefix("TXSIM")
-	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
-	v.AutomaticEnv()
-	for _, key := range []string{
-		"listen_addr",
-		"repo_root",
-		"project_roots",
-		"work_dir",
-		"project_cache_path",
-		"timeout_seconds",
-		"max_concurrent_runs",
-		"forge_bin",
-		"anvil_bin",
-		"anvil_host",
-		"anvil_port_start",
-		"etherscan_api_key",
-	} {
-		_ = v.BindEnv(key)
-	}
 	return v
 }
 
@@ -258,9 +236,6 @@ func loadDotEnv(paths ...string) error {
 func resolveRPCURLs(values map[string]string) map[string]string {
 	resolved := make(map[string]string, len(values))
 	for chain, rpcURL := range values {
-		if envValue := strings.TrimSpace(os.Getenv(chainEnvName(chain, "RPC_URL"))); envValue != "" {
-			rpcURL = envValue
-		}
 		resolved[chain] = os.ExpandEnv(rpcURL)
 	}
 	return resolved
@@ -269,27 +244,7 @@ func resolveRPCURLs(values map[string]string) map[string]string {
 func resolveExplorerURLs(values map[string]string) map[string]string {
 	resolved := make(map[string]string, len(values))
 	for chain, explorerURL := range values {
-		if envValue := strings.TrimSpace(os.Getenv(chainEnvName(chain, "EXPLORER_URL"))); envValue != "" {
-			explorerURL = envValue
-		}
 		resolved[chain] = strings.TrimRight(os.ExpandEnv(explorerURL), "/")
 	}
 	return resolved
-}
-
-func chainEnvName(chain string, suffix string) string {
-	normalized := strings.Map(func(r rune) rune {
-		if r >= 'a' && r <= 'z' {
-			return r - ('a' - 'A')
-		}
-		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
-			return r
-		}
-		return '_'
-	}, strings.TrimSpace(chain))
-	normalized = strings.Trim(normalized, "_")
-	if normalized == "" {
-		return suffix
-	}
-	return normalized + "_" + suffix
 }

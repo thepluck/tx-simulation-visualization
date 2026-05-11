@@ -5,7 +5,13 @@ yarn install
 yarn dev
 ```
 
-The app calls the backend at `http://127.0.0.1:8080` by default. Change the API URL field if the local server is running elsewhere.
+The app calls the backend at `http://127.0.0.1:8080` by default. Set `TXSIM_API_URL` when the browser should call a different backend URL:
+
+```bash
+TXSIM_API_URL=http://127.0.0.1:18080 yarn dev
+```
+
+You can also change the API URL field in the app for one-off local testing.
 
 Docker is available as an optional deployment path from the repo root:
 
