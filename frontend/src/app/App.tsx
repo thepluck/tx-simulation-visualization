@@ -165,6 +165,10 @@ export default function App() {
     simulationAbortRef.current?.abort();
   };
 
+  const reloadApp = () => {
+    window.location.reload();
+  };
+
   const openStoredRequest = () => {
     const requestId = requestLookupId.trim();
     if (!requestId || requestLookup.isPending) {
@@ -192,6 +196,7 @@ export default function App() {
           setOptimisticProjects((current) => mergeProjects([path], current).slice(0, 20));
           void queryClient.invalidateQueries({ queryKey: ["projects", form.apiUrl] });
         }}
+        onReload={reloadApp}
         onRequestTabChange={setRequestTab}
         onRequestLookupIdChange={setRequestLookupId}
         onOpenRequest={openStoredRequest}

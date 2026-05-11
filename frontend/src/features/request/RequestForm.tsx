@@ -18,6 +18,7 @@ type RequestFormProps = {
   onAbort: () => void;
   onOpenRequest: () => void;
   onProjectBrowsed: (path: string) => void;
+  onReload: () => void;
   onRequestTabChange: (value: RequestTab) => void;
   onRequestLookupIdChange: (value: string) => void;
   onSubmit: FormEventHandler<HTMLFormElement>;
@@ -40,6 +41,7 @@ export default function RequestForm(props: RequestFormProps) {
     onAbort,
     onOpenRequest,
     onProjectBrowsed,
+    onReload,
     onRequestTabChange,
     onRequestLookupIdChange,
     onSubmit,
@@ -66,7 +68,11 @@ export default function RequestForm(props: RequestFormProps) {
   return (
     <section className="control-panel" aria-label="Simulation request">
       <div className="panel-header">
-        <h1>Foundry Tx Simulator</h1>
+        <h1>
+          <button aria-label="Reload Foundry Tx Simulator" className="title-reload-button" title="Reload" type="button" onClick={onReload}>
+            Foundry Tx Simulator
+          </button>
+        </h1>
         <div className="panel-header-actions">
           <button
             aria-label={theme === "dark" ? "Use light theme" : "Use dark theme"}

@@ -49,6 +49,20 @@ h1 {
   line-height: 1.2;
 }
 
+.title-reload-button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font: inherit;
+  line-height: inherit;
+  text-align: left;
+}
+
+.title-reload-button:hover {
+  color: var(--accent);
+}
+
 h2 {
   font-size: 22px;
 }
