@@ -245,6 +245,260 @@ func TestParseOutputERC20TransferUsesCreateFrameAddress(t *testing.T) {
 	}
 }
 
+func TestParseOutputSkipsWholeRevertedTransaction(t *testing.T) {
+	output := `{
+  "returns": {},
+  "success": false,
+  "raw_logs": [],
+  "traces": [
+    [
+      "Execution",
+      {
+        "arena": [
+          {
+            "parent": null,
+            "children": [1],
+            "idx": 0,
+            "trace": {
+              "address": "0x0000000000000000000000000000000000000001",
+              "kind": "CALL",
+              "success": false,
+              "status": "Revert"
+            },
+            "logs": []
+          },
+          {
+            "parent": 0,
+            "children": [],
+            "idx": 1,
+            "trace": {
+              "address": "0x5555555555555555555555555555555555555555",
+              "kind": "CALL",
+              "success": false,
+              "status": "Revert"
+            },
+            "logs": [
+              {
+                "address": "0x5555555555555555555555555555555555555555",
+                "topics": [
+                  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                  "0x000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "0x000000000000000000000000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                ],
+                "data": "0x0000000000000000000000000000000000000000000000000000000000000004"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  ],
+  "gas_used": 1000,
+  "labeled_addresses": {},
+  "returned": "0x",
+  "address": null
+}`
+
+	parsed, err := ParseOutput(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(parsed.ERC20Transfers) != 0 {
+		t.Fatalf("erc20 transfers = %#v, want none for reverted transaction", parsed.ERC20Transfers)
+	}
+}
+
+func TestParseOutputSkipsRevertedBranch(t *testing.T) {
+	output := `{
+  "returns": {},
+  "success": true,
+  "raw_logs": [],
+  "traces": [
+    [
+      "Execution",
+      {
+        "arena": [
+          {
+            "parent": null,
+            "children": [1],
+            "idx": 0,
+            "trace": {
+              "address": "0x0000000000000000000000000000000000000001",
+              "kind": "CALL",
+              "success": true,
+              "status": "Return"
+            },
+            "logs": []
+          },
+          {
+            "parent": 0,
+            "children": [2, 3],
+            "idx": 1,
+            "trace": {
+              "address": "0x6666666666666666666666666666666666666666",
+              "kind": "CALL",
+              "success": true,
+              "status": "Return"
+            },
+            "logs": []
+          },
+          {
+            "parent": 1,
+            "children": [4],
+            "idx": 2,
+            "trace": {
+              "address": "0x7777777777777777777777777777777777777777",
+              "kind": "CALL",
+              "success": false,
+              "status": "Revert"
+            },
+            "logs": [
+              {
+                "address": "0x7777777777777777777777777777777777777777",
+                "topics": [
+                  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                  "0x000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "0x000000000000000000000000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                ],
+                "data": "0x0000000000000000000000000000000000000000000000000000000000000005"
+              }
+            ]
+          },
+          {
+            "parent": 1,
+            "children": [],
+            "idx": 3,
+            "trace": {
+              "address": "0x8888888888888888888888888888888888888888",
+              "kind": "CALL",
+              "success": true,
+              "status": "Return"
+            },
+            "logs": [
+              {
+                "address": "0x8888888888888888888888888888888888888888",
+                "topics": [
+                  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                  "0x000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "0x000000000000000000000000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                ],
+                "data": "0x0000000000000000000000000000000000000000000000000000000000000006"
+              }
+            ]
+          },
+          {
+            "parent": 2,
+            "children": [],
+            "idx": 4,
+            "trace": {
+              "address": "0x9999999999999999999999999999999999999999",
+              "kind": "CALL",
+              "success": true,
+              "status": "Return"
+            },
+            "logs": [
+              {
+                "address": "0x9999999999999999999999999999999999999999",
+                "topics": [
+                  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                  "0x000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "0x000000000000000000000000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                ],
+                "data": "0x0000000000000000000000000000000000000000000000000000000000000007"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  ],
+  "gas_used": 1000,
+  "labeled_addresses": {},
+  "returned": "0x",
+  "address": null
+}`
+
+	parsed, err := ParseOutput(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(parsed.ERC20Transfers) != 1 {
+		t.Fatalf("erc20 transfers = %#v, want one from non-reverted sibling only", parsed.ERC20Transfers)
+	}
+	transfer := parsed.ERC20Transfers[0]
+	if transfer.Token != "0x8888888888888888888888888888888888888888" || transfer.Amount != "6" {
+		t.Fatalf("unexpected transfer: %#v", transfer)
+	}
+}
+
+func TestParseOutputPreservesDuplicateTransfers(t *testing.T) {
+	output := `{
+  "returns": {},
+  "success": true,
+  "raw_logs": [],
+  "traces": [
+    [
+      "Execution",
+      {
+        "arena": [
+          {
+            "parent": null,
+            "children": [1],
+            "idx": 0,
+            "trace": {
+              "address": "0x0000000000000000000000000000000000000001",
+              "kind": "CALL"
+            },
+            "logs": []
+          },
+          {
+            "parent": 0,
+            "children": [],
+            "idx": 1,
+            "trace": {
+              "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "kind": "CALL"
+            },
+            "logs": [
+              {
+                "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "topics": [
+                  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                  "0x000000000000000000000000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "0x000000000000000000000000cccccccccccccccccccccccccccccccccccccccc"
+                ],
+                "data": "0x0000000000000000000000000000000000000000000000000000000000000008"
+              },
+              {
+                "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "topics": [
+                  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                  "0x000000000000000000000000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "0x000000000000000000000000cccccccccccccccccccccccccccccccccccccccc"
+                ],
+                "data": "0x0000000000000000000000000000000000000000000000000000000000000008"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  ],
+  "gas_used": 1000,
+  "labeled_addresses": {},
+  "returned": "0x",
+  "address": null
+}`
+
+	parsed, err := ParseOutput(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(parsed.ERC20Transfers) != 2 {
+		t.Fatalf("erc20 transfers = %#v, want duplicate logs preserved", parsed.ERC20Transfers)
+	}
+}
+
 func TestParseOutputRejectsTextTrace(t *testing.T) {
 	_, err := ParseOutput(`Traces:
   [252850] SimulateTxScript::run()

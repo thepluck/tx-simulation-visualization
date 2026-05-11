@@ -40,6 +40,8 @@ type forgeArenaNode struct {
 type forgeCallTrace struct {
 	Address string `json:"address"`
 	Kind    string `json:"kind"`
+	Status  string `json:"status"`
+	Success *bool  `json:"success"`
 }
 
 type forgeLog struct {
@@ -75,10 +77,9 @@ func ParseOutput(output string) (ParsedOutput, error) {
 
 	hasArena := false
 	transfers := make([]model.ERC20Transfer, 0)
-	seenTransfers := make(map[model.ERC20Transfer]struct{})
 	for _, trace := range payload.Traces {
 		hasArena = hasArena || len(trace.Body.Arena) > 0
-		transfers = appendUniqueTransfers(transfers, seenTransfers, trace.erc20Transfers()...)
+		transfers = append(transfers, trace.erc20Transfers()...)
 	}
 	if !hasArena {
 		return ParsedOutput{}, fmt.Errorf("forge json trace has no arena nodes")
@@ -132,77 +133,58 @@ func (entry forgeTraceEntry) erc20Transfers() []model.ERC20Transfer {
 	for _, item := range entry.Body.Arena {
 		arenaByID[item.Idx] = item
 	}
+	root, ok := transactionRoot(entry.Body.Arena)
+	if !ok {
+		return nil
+	}
+	return collectERC20Transfers(root, arenaByID, "")
+}
 
-	txRoots := transactionRootIDs(entry.Body.Arena)
-	transfers := make([]model.ERC20Transfer, 0)
-	seenTransfers := make(map[model.ERC20Transfer]struct{})
-	for _, item := range entry.Body.Arena {
-		if len(item.Logs) == 0 {
-			continue
+func transactionRoot(arena []forgeArenaNode) (forgeArenaNode, bool) {
+	for index := len(arena) - 1; index >= 0; index-- {
+		item := arena[index]
+		if item.Parent != nil && *item.Parent == 0 {
+			return item, true
 		}
-		tokenContext, ok := nonDelegateContext(item, arenaByID)
+	}
+	return forgeArenaNode{}, false
+}
+
+func collectERC20Transfers(item forgeArenaNode, arenaByID map[int]forgeArenaNode, tokenContext string) []model.ERC20Transfer {
+	if isRevertedTrace(item.Trace) {
+		return nil
+	}
+	if !isTraceKind(item.Trace, "DELEGATECALL") {
+		tokenContext = item.Trace.Address
+	}
+
+	transfers := make([]model.ERC20Transfer, 0)
+	for _, rawLog := range item.Logs {
+		log, ok := parseForgeLog(rawLog)
 		if !ok {
 			continue
 		}
-		if len(txRoots) > 0 && !isUnderAnyRoot(tokenContext.Idx, txRoots, arenaByID) {
+		transfer, ok := erc20TransferFromLog(log, tokenContext)
+		if ok {
+			transfers = append(transfers, transfer)
+		}
+	}
+	for _, childID := range item.Children {
+		child, ok := arenaByID[childID]
+		if !ok {
 			continue
 		}
-
-		for _, rawLog := range item.Logs {
-			log, ok := parseForgeLog(rawLog)
-			if !ok {
-				continue
-			}
-			transfer, ok := erc20TransferFromLog(log, tokenContext.Trace.Address)
-			if ok {
-				transfers = appendUniqueTransfers(transfers, seenTransfers, transfer)
-			}
-		}
+		transfers = append(transfers, collectERC20Transfers(child, arenaByID, tokenContext)...)
 	}
 	return transfers
 }
 
-func transactionRootIDs(arena []forgeArenaNode) map[int]struct{} {
-	roots := make(map[int]struct{})
-	for index := len(arena) - 1; index >= 0; index-- {
-		item := arena[index]
-		if item.Parent == nil || *item.Parent != 0 {
-			continue
-		}
-		roots[item.Idx] = struct{}{}
-		break
+func isRevertedTrace(trace forgeCallTrace) bool {
+	if trace.Success != nil && !*trace.Success {
+		return true
 	}
-	return roots
-}
-
-func nonDelegateContext(item forgeArenaNode, arenaByID map[int]forgeArenaNode) (forgeArenaNode, bool) {
-	current := item
-	for {
-		if !isTraceKind(current.Trace, "DELEGATECALL") {
-			return current, true
-		}
-		if current.Parent == nil {
-			return forgeArenaNode{}, false
-		}
-		parent, ok := arenaByID[*current.Parent]
-		if !ok {
-			return forgeArenaNode{}, false
-		}
-		current = parent
-	}
-}
-
-func isUnderAnyRoot(idx int, roots map[int]struct{}, arenaByID map[int]forgeArenaNode) bool {
-	for {
-		if _, ok := roots[idx]; ok {
-			return true
-		}
-		item, ok := arenaByID[idx]
-		if !ok || item.Parent == nil {
-			return false
-		}
-		idx = *item.Parent
-	}
+	status := strings.ToLower(strings.TrimSpace(trace.Status))
+	return status == "revert" || status == "reverted"
 }
 
 func isTraceKind(trace forgeCallTrace, kind string) bool {
@@ -302,17 +284,6 @@ func normalizedHexBytes(value string) int {
 		return 0
 	}
 	return (len(value) + 1) / 2
-}
-
-func appendUniqueTransfers(transfers []model.ERC20Transfer, seen map[model.ERC20Transfer]struct{}, items ...model.ERC20Transfer) []model.ERC20Transfer {
-	for _, item := range items {
-		if _, exists := seen[item]; exists {
-			continue
-		}
-		seen[item] = struct{}{}
-		transfers = append(transfers, item)
-	}
-	return transfers
 }
 
 func isAddress(value string) bool {
