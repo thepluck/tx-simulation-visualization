@@ -75,9 +75,10 @@ func ParseOutput(output string) (ParsedOutput, error) {
 
 	hasArena := false
 	transfers := make([]model.ERC20Transfer, 0)
+	seenTransfers := make(map[model.ERC20Transfer]struct{})
 	for _, trace := range payload.Traces {
 		hasArena = hasArena || len(trace.Body.Arena) > 0
-		transfers = appendUniqueTransfer(transfers, trace.erc20Transfers()...)
+		transfers = appendUniqueTransfers(transfers, seenTransfers, trace.erc20Transfers()...)
 	}
 	if !hasArena {
 		return ParsedOutput{}, fmt.Errorf("forge json trace has no arena nodes")
@@ -134,15 +135,16 @@ func (entry forgeTraceEntry) erc20Transfers() []model.ERC20Transfer {
 
 	txRoots := transactionRootIDs(entry.Body.Arena)
 	transfers := make([]model.ERC20Transfer, 0)
+	seenTransfers := make(map[model.ERC20Transfer]struct{})
 	for _, item := range entry.Body.Arena {
 		if len(item.Logs) == 0 {
 			continue
 		}
-		callContext, ok := nearestCallContext(item, arenaByID)
+		tokenContext, ok := nonDelegateContext(item, arenaByID)
 		if !ok {
 			continue
 		}
-		if len(txRoots) > 0 && !isUnderAnyRoot(callContext.Idx, txRoots, arenaByID) {
+		if len(txRoots) > 0 && !isUnderAnyRoot(tokenContext.Idx, txRoots, arenaByID) {
 			continue
 		}
 
@@ -151,9 +153,9 @@ func (entry forgeTraceEntry) erc20Transfers() []model.ERC20Transfer {
 			if !ok {
 				continue
 			}
-			transfer, ok := erc20TransferFromLog(log, callContext.Trace.Address)
+			transfer, ok := erc20TransferFromLog(log, tokenContext.Trace.Address)
 			if ok {
-				transfers = appendUniqueTransfer(transfers, transfer)
+				transfers = appendUniqueTransfers(transfers, seenTransfers, transfer)
 			}
 		}
 	}
@@ -173,10 +175,10 @@ func transactionRootIDs(arena []forgeArenaNode) map[int]struct{} {
 	return roots
 }
 
-func nearestCallContext(item forgeArenaNode, arenaByID map[int]forgeArenaNode) (forgeArenaNode, bool) {
+func nonDelegateContext(item forgeArenaNode, arenaByID map[int]forgeArenaNode) (forgeArenaNode, bool) {
 	current := item
 	for {
-		if isTraceKind(current.Trace, "CALL") {
+		if !isTraceKind(current.Trace, "DELEGATECALL") {
 			return current, true
 		}
 		if current.Parent == nil {
@@ -302,18 +304,13 @@ func normalizedHexBytes(value string) int {
 	return (len(value) + 1) / 2
 }
 
-func appendUniqueTransfer(transfers []model.ERC20Transfer, items ...model.ERC20Transfer) []model.ERC20Transfer {
+func appendUniqueTransfers(transfers []model.ERC20Transfer, seen map[model.ERC20Transfer]struct{}, items ...model.ERC20Transfer) []model.ERC20Transfer {
 	for _, item := range items {
-		exists := false
-		for _, existing := range transfers {
-			if existing == item {
-				exists = true
-				break
-			}
+		if _, exists := seen[item]; exists {
+			continue
 		}
-		if !exists {
-			transfers = append(transfers, item)
-		}
+		seen[item] = struct{}{}
+		transfers = append(transfers, item)
 	}
 	return transfers
 }

@@ -79,7 +79,7 @@ func TestParseOutputForgeJSONTrace(t *testing.T) {
 	}
 }
 
-func TestParseOutputERC20TransferUsesLastParentZeroNodeAndNearestCallAncestor(t *testing.T) {
+func TestParseOutputERC20TransferUsesLastParentZeroNodeAndNonDelegateContext(t *testing.T) {
 	output := `{
   "returns": {},
   "success": true,
@@ -176,6 +176,72 @@ func TestParseOutputERC20TransferUsesLastParentZeroNodeAndNearestCallAncestor(t 
 	}
 	if transfer.Amount != "2" {
 		t.Fatalf("transfer amount = %s, want 2", transfer.Amount)
+	}
+}
+
+func TestParseOutputERC20TransferUsesCreateFrameAddress(t *testing.T) {
+	output := `{
+  "returns": {},
+  "success": true,
+  "raw_logs": [],
+  "traces": [
+    [
+      "Execution",
+      {
+        "arena": [
+          {
+            "parent": null,
+            "children": [1],
+            "idx": 0,
+            "trace": {
+              "address": "0x0000000000000000000000000000000000000001",
+              "kind": "CALL"
+            },
+            "logs": []
+          },
+          {
+            "parent": 0,
+            "children": [],
+            "idx": 1,
+            "trace": {
+              "address": "0x4444444444444444444444444444444444444444",
+              "kind": "CREATE"
+            },
+            "logs": [
+              {
+                "address": "0x4444444444444444444444444444444444444444",
+                "topics": [
+                  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                  "0x000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "0x000000000000000000000000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                ],
+                "data": "0x0000000000000000000000000000000000000000000000000000000000000003"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  ],
+  "gas_used": 1000,
+  "labeled_addresses": {},
+  "returned": "0x",
+  "address": null
+}`
+
+	parsed, err := ParseOutput(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(parsed.ERC20Transfers) != 1 {
+		t.Fatalf("erc20 transfers = %#v, want one", parsed.ERC20Transfers)
+	}
+	transfer := parsed.ERC20Transfers[0]
+	if transfer.Token != "0x4444444444444444444444444444444444444444" {
+		t.Fatalf("transfer token = %s, want create frame address", transfer.Token)
+	}
+	if transfer.Amount != "3" {
+		t.Fatalf("transfer amount = %s, want 3", transfer.Amount)
 	}
 }
 

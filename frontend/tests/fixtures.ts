@@ -40,7 +40,7 @@ export async function routeBaseEndpoints(page: Page) {
 export function simulateResponse() {
   const eventCount = 50;
   const transfers = [
-    ...Array.from({ length: 50 }, () => ({
+    ...Array.from({ length: eventCount }, () => ({
       token,
       from: owner,
       to: recipient,
