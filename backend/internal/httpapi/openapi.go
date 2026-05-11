@@ -124,7 +124,6 @@ func registerOpenAPISchemas(schemas openapi3.Schemas) error {
 		{"BalanceAnalysis", model.BalanceAnalysis{}},
 		{"TokenBalanceChange", model.TokenBalanceChange{}},
 		{"UserUSDChange", model.UserUSDChange{}},
-		{"TraceNode", model.TraceNode{}},
 		{"ErrorResponse", model.ErrorResponse{}},
 	} {
 		if err := registerOpenAPISchema(schemas, item.name, item.value); err != nil {
@@ -253,8 +252,6 @@ func enrichOpenAPISchemas(schemas openapi3.Schemas) {
 	setPropertyEnum(schemas, "CompilerConfig", "revertStrings", "default", "strip", "debug", "verboseDebug")
 	setPropertyExample(schemas, "CompilerConfig", "revertStrings", "default")
 
-	setPropertyEnum(schemas, "TraceNode", "kind", "call", "return", "revert", "event", "error", "result", "unknown")
-
 	if schema := schemaValue(schemas, "Uint256"); schema != nil {
 		schema.Type = &openapi3.Types{"string"}
 		schema.Pattern = uint256Pattern
@@ -289,7 +286,7 @@ func addOpenAPIOperations(spec *openapi3.T) {
 	))
 
 	op := postOperation(
-		"Run a Forge script simulation and return raw plus structured trace",
+		"Run a Forge script simulation and return the raw Forge JSON trace with fund-flow analysis",
 		"SimulateRequest",
 		"SimulateResponse",
 	)

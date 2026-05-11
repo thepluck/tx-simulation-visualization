@@ -1,214 +1,300 @@
 package traceparser
 
 import (
-	"strconv"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"math/big"
 	"strings"
 	"unicode"
 
 	"foundry-tx-simulator/backend/internal/model"
 )
 
-type workNode struct {
-	item     model.TraceNode
-	children []*workNode
+type ParsedOutput struct {
+	Trace          string
+	ERC20Transfers []model.ERC20Transfer
 }
 
-func Parse(trace string) []model.TraceNode {
-	var roots []*workNode
-	var stack []*workNode
+type forgeOutput struct {
+	Traces []forgeTraceEntry `json:"traces"`
+}
 
-	for _, line := range strings.Split(trace, "\n") {
-		depth, content, ok := splitTraceLine(line)
+type forgeTraceEntry struct {
+	Kind string
+	Body forgeTraceBody
+}
+
+type forgeTraceBody struct {
+	Arena []forgeArenaNode `json:"arena"`
+}
+
+type forgeArenaNode struct {
+	Parent   *int              `json:"parent"`
+	Children []int             `json:"children"`
+	Idx      int               `json:"idx"`
+	Trace    forgeCallTrace    `json:"trace"`
+	Logs     []json.RawMessage `json:"logs"`
+}
+
+type forgeCallTrace struct {
+	Address string `json:"address"`
+	Kind    string `json:"kind"`
+	Status  string `json:"status"`
+	Success *bool  `json:"success"`
+}
+
+type forgeLog struct {
+	Address string       `json:"address"`
+	Emitter string       `json:"emitter"`
+	Topics  []string     `json:"topics"`
+	Data    string       `json:"data"`
+	RawLog  *forgeRawLog `json:"raw_log"`
+}
+
+type forgeRawLog struct {
+	Address string   `json:"address"`
+	Emitter string   `json:"emitter"`
+	Topics  []string `json:"topics"`
+	Data    string   `json:"data"`
+}
+
+const erc20TransferTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+
+func ParseOutput(output string) (ParsedOutput, error) {
+	raw := forgeJSONPayload(output)
+	if len(raw) == 0 {
+		return ParsedOutput{}, fmt.Errorf("forge json trace output is empty")
+	}
+
+	var payload forgeOutput
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return ParsedOutput{}, fmt.Errorf("decode forge json trace: %w", err)
+	}
+	if len(payload.Traces) == 0 {
+		return ParsedOutput{}, fmt.Errorf("forge json trace has no traces")
+	}
+
+	hasArena := false
+	transfers := make([]model.ERC20Transfer, 0)
+	for _, trace := range payload.Traces {
+		hasArena = hasArena || len(trace.Body.Arena) > 0
+		transfers = append(transfers, trace.erc20Transfers()...)
+	}
+	if !hasArena {
+		return ParsedOutput{}, fmt.Errorf("forge json trace has no arena nodes")
+	}
+
+	return ParsedOutput{
+		Trace:          indentJSON(raw),
+		ERC20Transfers: transfers,
+	}, nil
+}
+
+func forgeJSONPayload(output string) []byte {
+	output = strings.TrimSpace(output)
+	if output == "" {
+		return nil
+	}
+	if strings.HasPrefix(output, "{") {
+		return []byte(output)
+	}
+	start := strings.Index(output, "\n{")
+	if start < 0 {
+		return nil
+	}
+	return []byte(strings.TrimSpace(output[start+1:]))
+}
+
+func indentJSON(raw []byte) string {
+	var output bytes.Buffer
+	if err := json.Indent(&output, raw, "", "  "); err != nil {
+		return strings.TrimSpace(string(raw))
+	}
+	return output.String()
+}
+
+func (entry *forgeTraceEntry) UnmarshalJSON(data []byte) error {
+	var tuple []json.RawMessage
+	if err := json.Unmarshal(data, &tuple); err != nil {
+		return err
+	}
+	if len(tuple) != 2 {
+		return fmt.Errorf("trace entry must be a [kind, body] tuple")
+	}
+	if err := json.Unmarshal(tuple[0], &entry.Kind); err != nil {
+		return err
+	}
+	return json.Unmarshal(tuple[1], &entry.Body)
+}
+
+func (entry forgeTraceEntry) erc20Transfers() []model.ERC20Transfer {
+	arenaByID := make(map[int]forgeArenaNode, len(entry.Body.Arena))
+	for _, item := range entry.Body.Arena {
+		arenaByID[item.Idx] = item
+	}
+	root, ok := transactionRoot(entry.Body.Arena)
+	if !ok {
+		return nil
+	}
+	return collectERC20Transfers(root, arenaByID, "")
+}
+
+func transactionRoot(arena []forgeArenaNode) (forgeArenaNode, bool) {
+	for index := len(arena) - 1; index >= 0; index-- {
+		item := arena[index]
+		if item.Parent != nil && *item.Parent == 0 {
+			return item, true
+		}
+	}
+	return forgeArenaNode{}, false
+}
+
+func collectERC20Transfers(item forgeArenaNode, arenaByID map[int]forgeArenaNode, tokenContext string) []model.ERC20Transfer {
+	if isRevertedTrace(item.Trace) {
+		return nil
+	}
+	if !isTraceKind(item.Trace, "DELEGATECALL") {
+		tokenContext = item.Trace.Address
+	}
+
+	transfers := make([]model.ERC20Transfer, 0)
+	for _, rawLog := range item.Logs {
+		log, ok := parseForgeLog(rawLog)
 		if !ok {
 			continue
 		}
-
-		node := &workNode{item: parseContent(content, depth)}
-		if depth <= 0 || len(stack) < depth || stack[depth-1] == nil {
-			roots = append(roots, node)
-		} else {
-			parent := stack[depth-1]
-			parent.children = append(parent.children, node)
-		}
-
-		if len(stack) <= depth {
-			stack = append(stack, make([]*workNode, depth-len(stack)+1)...)
-		}
-		stack[depth] = node
-		for i := depth + 1; i < len(stack); i++ {
-			stack[i] = nil
+		transfer, ok := erc20TransferFromLog(log, tokenContext)
+		if ok {
+			transfers = append(transfers, transfer)
 		}
 	}
-
-	out := make([]model.TraceNode, 0, len(roots))
-	for _, root := range roots {
-		out = append(out, root.toModel())
+	for _, childID := range item.Children {
+		child, ok := arenaByID[childID]
+		if !ok {
+			continue
+		}
+		transfers = append(transfers, collectERC20Transfers(child, arenaByID, tokenContext)...)
 	}
-	return out
+	return transfers
 }
 
-func (n *workNode) toModel() model.TraceNode {
-	item := n.item
-	if len(n.children) > 0 {
-		item.Children = make([]model.TraceNode, 0, len(n.children))
-		for _, child := range n.children {
-			item.Children = append(item.Children, child.toModel())
+func isRevertedTrace(trace forgeCallTrace) bool {
+	if trace.Success != nil && !*trace.Success {
+		return true
+	}
+	status := strings.ToLower(strings.TrimSpace(trace.Status))
+	return status == "revert" || status == "reverted"
+}
+
+func isTraceKind(trace forgeCallTrace, kind string) bool {
+	return strings.EqualFold(strings.TrimSpace(trace.Kind), kind)
+}
+
+func parseForgeLog(raw json.RawMessage) (forgeLog, bool) {
+	var log forgeLog
+	if err := json.Unmarshal(raw, &log); err != nil {
+		return forgeLog{}, false
+	}
+	if log.RawLog != nil {
+		if log.Address == "" {
+			log.Address = log.RawLog.Address
+		}
+		if log.Emitter == "" {
+			log.Emitter = log.RawLog.Emitter
+		}
+		if len(log.Topics) == 0 {
+			log.Topics = log.RawLog.Topics
+		}
+		if log.Data == "" {
+			log.Data = log.RawLog.Data
 		}
 	}
-	return item
+	if log.Address == "" {
+		log.Address = log.Emitter
+	}
+	return log, len(log.Topics) > 0
 }
 
-func splitTraceLine(line string) (int, string, bool) {
-	if strings.TrimSpace(line) == "" {
-		return 0, "", false
+func erc20TransferFromLog(log forgeLog, tokenAddress string) (model.ERC20Transfer, bool) {
+	if len(log.Topics) != 3 || normalizeHex(log.Topics[0]) != erc20TransferTopic {
+		return model.ERC20Transfer{}, false
 	}
-	if strings.TrimSpace(line) == "Traces:" || strings.TrimSpace(line) == "Trace:" {
-		return 0, "", false
-	}
-
-	if idx := strings.Index(line, "├─"); idx >= 0 {
-		return depthFromPrefix(line[:idx]), strings.TrimSpace(line[idx+len("├─"):]), true
-	}
-	if idx := strings.Index(line, "└─"); idx >= 0 {
-		return depthFromPrefix(line[:idx]), strings.TrimSpace(line[idx+len("└─"):]), true
+	if normalizedHexBytes(log.Data) != 32 {
+		return model.ERC20Transfer{}, false
 	}
 
-	content := strings.TrimSpace(line)
-	if strings.HasPrefix(content, "[") || strings.HasPrefix(content, "←") || strings.HasPrefix(content, "emit ") {
-		return 0, content, true
+	token := normalizeAddress(tokenAddress)
+	if token == "" {
+		token = normalizeAddress(log.Address)
 	}
-	if strings.HasPrefix(content, "Error:") {
-		return 0, content, true
+	from := topicAddress(log.Topics[1])
+	to := topicAddress(log.Topics[2])
+	amount := hexUintToDecimal(log.Data)
+	if token == "" || from == "" || to == "" || amount == "" {
+		return model.ERC20Transfer{}, false
 	}
-	return 0, "", false
+
+	return model.ERC20Transfer{
+		Token:  token,
+		From:   from,
+		To:     to,
+		Amount: amount,
+	}, true
 }
 
-func depthFromPrefix(prefix string) int {
-	depth := len([]rune(prefix)) / 4
-	if depth < 1 {
-		return 1
+func normalizeHex(value string) string {
+	value = strings.TrimSpace(value)
+	if !strings.HasPrefix(value, "0x") && !strings.HasPrefix(value, "0X") {
+		return value
 	}
-	return depth
+	return "0x" + strings.ToLower(strings.TrimPrefix(strings.TrimPrefix(value, "0x"), "0X"))
 }
 
-func parseContent(content string, depth int) model.TraceNode {
-	node := model.TraceNode{
-		Raw:   content,
-		Kind:  "unknown",
-		Depth: depth,
+func normalizeAddress(value string) string {
+	value = normalizeHex(value)
+	if !isAddress(value) {
+		return ""
 	}
-
-	if strings.HasPrefix(content, "←") {
-		parseResult(content, &node)
-		return node
-	}
-	if strings.HasPrefix(content, "emit ") {
-		node.Kind = "event"
-		node.Value = strings.TrimSpace(strings.TrimPrefix(content, "emit "))
-		return node
-	}
-	if strings.HasPrefix(content, "Error:") {
-		node.Kind = "error"
-		node.Value = content
-		return node
-	}
-
-	node.Kind = "call"
-	rest := content
-	if gas, afterGas, ok := parseGas(rest); ok {
-		node.Gas = gas
-		rest = afterGas
-	}
-	if callType, afterType, ok := parseCallType(rest); ok {
-		node.CallType = callType
-		rest = afterType
-	}
-	parseCall(rest, &node)
-	return node
+	return value
 }
 
-func parseResult(content string, node *model.TraceNode) {
-	node.Kind = "result"
-
-	rest := strings.TrimSpace(strings.TrimPrefix(content, "←"))
-	if !strings.HasPrefix(rest, "[") {
-		node.Value = rest
-		return
+func topicAddress(topic string) string {
+	topic = strings.TrimPrefix(normalizeHex(topic), "0x")
+	if len(topic) < 40 {
+		return ""
 	}
-
-	end := strings.Index(rest, "]")
-	if end < 0 {
-		node.Value = rest
-		return
-	}
-
-	node.ResultType = rest[1:end]
-	node.Kind = strings.ToLower(node.ResultType)
-	node.Value = strings.TrimSpace(rest[end+1:])
+	return "0x" + topic[len(topic)-40:]
 }
 
-func parseGas(content string) (uint64, string, bool) {
-	if !strings.HasPrefix(content, "[") {
-		return 0, content, false
-	}
-	end := strings.Index(content, "]")
-	if end < 0 {
-		return 0, content, false
-	}
-
-	value, err := strconv.ParseUint(content[1:end], 10, 64)
-	if err != nil {
-		return 0, content, false
-	}
-	return value, strings.TrimSpace(content[end+1:]), true
-}
-
-func parseCallType(content string) (string, string, bool) {
-	trimmed := strings.TrimSpace(content)
-	if !strings.HasSuffix(trimmed, "]") {
-		return "", content, false
-	}
-
-	start := strings.LastIndex(trimmed, "[")
-	if start < 0 {
-		return "", content, false
-	}
-
-	value := trimmed[start+1 : len(trimmed)-1]
-	if value == "" || allDigits(value) {
-		return "", content, false
-	}
-
-	return value, strings.TrimSpace(trimmed[:start]), true
-}
-
-func parseCall(content string, node *model.TraceNode) {
-	target, rest, ok := strings.Cut(content, "::")
+func hexUintToDecimal(value string) string {
+	n, ok := new(big.Int).SetString(strings.TrimPrefix(normalizeHex(value), "0x"), 16)
 	if !ok {
-		node.Value = content
-		return
+		return ""
 	}
-
-	node.Target = strings.TrimSpace(target)
-	paren := strings.Index(rest, "(")
-	if paren < 0 {
-		node.Function = strings.TrimSpace(rest)
-		return
-	}
-
-	node.Function = strings.TrimSpace(rest[:paren])
-	if end := strings.LastIndex(rest, ")"); end > paren {
-		node.Arguments = rest[paren+1 : end]
-	} else {
-		node.Arguments = rest[paren+1:]
-	}
+	return n.String()
 }
 
-func allDigits(value string) bool {
-	for _, r := range value {
-		if !unicode.IsDigit(r) {
+func normalizedHexBytes(value string) int {
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(value, "0x") || strings.HasPrefix(value, "0X") {
+		value = value[2:]
+	}
+	if value == "" {
+		return 0
+	}
+	return (len(value) + 1) / 2
+}
+
+func isAddress(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) != 42 || !strings.HasPrefix(value, "0x") {
+		return false
+	}
+	for _, r := range value[2:] {
+		if !unicode.IsDigit(r) && (r < 'a' || r > 'f') && (r < 'A' || r > 'F') {
 			return false
 		}
 	}
-	return value != ""
+	return true
 }

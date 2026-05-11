@@ -184,6 +184,11 @@
   line-height: 1.45;
 }
 
+.trace-function {
+  color: var(--accent);
+  font-weight: 800;
+}
+
 .trace-bytes-toggle {
   max-width: 100%;
   border: 0;

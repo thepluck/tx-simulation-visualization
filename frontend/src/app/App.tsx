@@ -16,6 +16,7 @@ import {
 } from "./form";
 import { buildAddressLabels } from "../lib/labels";
 import { loadPersistedUIState, savePersistedUIState } from "../lib/persistence";
+import { traceDataFromResponse } from "../lib/forgeTrace";
 import type { SimulateRequest, SimulateResponse } from "../api/types";
 
 const requestLookupTimeoutMillis = 10_000;
@@ -81,7 +82,11 @@ export default function App() {
     const state = response.success ? "success" : "failed";
     return `${state} | ${response.durationMillis}ms | exit ${response.exitCode} | ${response.id}`;
   }, [response]);
-  const addressLabels = useMemo(() => buildAddressLabels(form.labelOverrides, form.sender, response), [form.labelOverrides, form.sender, response]);
+  const traceData = useMemo(() => traceDataFromResponse(response), [response]);
+  const addressLabels = useMemo(
+    () => buildAddressLabels(form.labelOverrides, form.sender, response, traceData.labels),
+    [form.labelOverrides, form.sender, response, traceData.labels]
+  );
   const explorerBaseUrl = useMemo(() => explorerForChain(explorerUrls, form.chain), [explorerUrls, form.chain]);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
@@ -251,6 +256,7 @@ export default function App() {
         outputView={outputView}
         response={response}
         runMeta={runMeta}
+        traceNodes={traceData.nodes}
         onExpandDepthChange={setTraceExpandDepth}
         onExpandModeChange={setExpandMode}
         onOutputViewChange={setOutputView}

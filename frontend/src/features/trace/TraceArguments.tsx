@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { type AddressLabels, isAddress, looksLikeTraceLabel, replaceLabelAliases, resolveAddressReference } from "../../lib/labels";
+import { type AddressLabels, isAddress, replaceLabelAliases } from "../../lib/labels";
 import AddressReference from "../../components/AddressReference";
 import { highlightSearchText } from "../../components/SearchHighlight";
 
@@ -22,21 +22,16 @@ type ArgumentPiece =
   | {
       kind: "address";
       value: string;
-    }
-  | {
-      address: string;
-      kind: "labeledAddress";
-      label: string;
     };
 
 const longHexPattern = /0x[0-9a-fA-F]{48,}/g;
 const addressPattern = /0x[0-9a-fA-F]{40}/g;
-const labeledAddressPattern = /([^,()[\]\n]+?):\s*\[(0x[0-9a-fA-F]{40})\]/g;
+const bracketedAddressPattern = /([^,()[\]\n]+?):\s*\[(0x[0-9a-fA-F]{40})\]/g;
 
 export default function TraceArguments(props: TraceArgumentsProps) {
   return (
     <>
-      {splitArgumentPieces(props.value, props.addressLabels).map((piece, index) => {
+      {splitArgumentPieces(props.value).map((piece, index) => {
         if (piece.kind === "bytes") {
           return <CollapsibleBytes highlightTerms={props.highlightTerms} key={`${piece.value}-${index}`} value={piece.value} />;
         }
@@ -48,18 +43,6 @@ export default function TraceArguments(props: TraceArgumentsProps) {
               explorerBaseUrl={props.explorerBaseUrl}
               highlightTerms={props.highlightTerms}
               key={`${piece.value}-${index}`}
-            />
-          );
-        }
-        if (piece.kind === "labeledAddress") {
-          return (
-            <AddressReference
-              address={piece.address}
-              addressLabels={props.addressLabels}
-              displayLabel={piece.label}
-              explorerBaseUrl={props.explorerBaseUrl}
-              highlightTerms={props.highlightTerms}
-              key={`${piece.label}-${piece.address}-${index}`}
             />
           );
         }
@@ -89,49 +72,49 @@ function CollapsibleBytes(props: { highlightTerms?: string[]; value: string }) {
   );
 }
 
-function splitArgumentPieces(value: string, labels: AddressLabels): ArgumentPiece[] {
+function splitArgumentPieces(value: string): ArgumentPiece[] {
   const pieces: ArgumentPiece[] = [];
   let cursor = 0;
 
   for (const match of value.matchAll(longHexPattern)) {
     const start = match.index ?? 0;
     if (start > cursor) {
-      pieces.push(...splitAddressPieces(value.slice(cursor, start), labels));
+      pieces.push(...splitBareAddressPieces(value.slice(cursor, start)));
     }
     pieces.push({ kind: "bytes", value: match[0] });
     cursor = start + match[0].length;
   }
 
   if (cursor < value.length) {
-    pieces.push(...splitAddressPieces(value.slice(cursor), labels));
+    pieces.push(...splitBareAddressPieces(value.slice(cursor)));
   }
   return pieces.length > 0 ? pieces : [{ kind: "text", value }];
 }
 
-function splitAddressPieces(value: string, labels: AddressLabels): ArgumentPiece[] {
+function splitBareAddressPieces(value: string): ArgumentPiece[] {
   const pieces: ArgumentPiece[] = [];
   let cursor = 0;
 
-  for (const match of value.matchAll(labeledAddressPattern)) {
+  for (const match of value.matchAll(bracketedAddressPattern)) {
     const start = match.index ?? 0;
     if (start > cursor) {
-      pieces.push(...splitBareAddressPieces(value.slice(cursor, start)));
+      pieces.push(...splitPlainAddressPieces(value.slice(cursor, start)));
     }
-    const labeled = splitFoundryLabelPrefix(match[1], match[2], labels);
-    if (labeled.prefix) {
-      pieces.push({ kind: "text", value: labeled.prefix });
+    const prefix = bracketedAddressPrefix(match[1]);
+    if (prefix) {
+      pieces.push({ kind: "text", value: prefix });
     }
-    pieces.push(labeled.label ? { address: match[2], kind: "labeledAddress", label: labeled.label } : { kind: "address", value: match[2] });
+    pieces.push({ kind: "address", value: match[2] });
     cursor = start + match[0].length;
   }
 
   if (cursor < value.length) {
-    pieces.push(...splitBareAddressPieces(value.slice(cursor)));
+    pieces.push(...splitPlainAddressPieces(value.slice(cursor)));
   }
   return pieces;
 }
 
-function splitBareAddressPieces(value: string): ArgumentPiece[] {
+function splitPlainAddressPieces(value: string): ArgumentPiece[] {
   const pieces: ArgumentPiece[] = [];
   let cursor = 0;
 
@@ -151,28 +134,16 @@ function splitBareAddressPieces(value: string): ArgumentPiece[] {
   return pieces;
 }
 
-function splitFoundryLabelPrefix(value: string, address: string, labels: AddressLabels): { label?: string; prefix: string } {
+function bracketedAddressPrefix(value: string): string {
   const leadingSpace = value.match(/^\s*/)?.[0] ?? "";
   const parts = value
     .split(":")
     .map((part) => part.trim())
     .filter(Boolean);
-  if (parts.length <= 1) {
-    const candidate = parts[0] || value.trim();
-    const resolved = resolveAddressReference(candidate, labels);
-    if (resolved?.address.toLowerCase() === address.toLowerCase() || looksLikeTraceLabel(candidate)) {
-      return { label: candidate, prefix: leadingSpace };
-    }
-    return { prefix: `${leadingSpace}${candidate}: ` };
+  if (parts.length >= 2) {
+    return `${leadingSpace}${parts.slice(0, -1).join(": ")}: `;
   }
-  const label = parts[parts.length - 1];
-  if (!looksLikeTraceLabel(label)) {
-    return { prefix: `${leadingSpace}${parts.join(": ")}: ` };
-  }
-  return {
-    label,
-    prefix: `${leadingSpace}${parts.slice(0, -1).join(": ")}: `
-  };
+  return leadingSpace;
 }
 
 function shortenBytes(value: string): string {

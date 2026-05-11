@@ -111,41 +111,12 @@ export const balanceAnalysisSchema = z.object({
   userTotals: z.array(userUSDChangeSchema).optional()
 });
 
-export type TraceNode = {
-  raw: string;
-  kind: string;
-  gas?: number;
-  target?: string;
-  function?: string;
-  arguments?: string;
-  callType?: string;
-  resultType?: string;
-  value?: string;
-  children?: TraceNode[];
-};
-
-export const traceNodeSchema: z.ZodType<TraceNode> = z.lazy(() =>
-  z.object({
-    raw: z.string(),
-    kind: z.string(),
-    gas: z.number().optional(),
-    target: z.string().optional(),
-    function: z.string().optional(),
-    arguments: z.string().optional(),
-    callType: z.string().optional(),
-    resultType: z.string().optional(),
-    value: z.string().optional(),
-    children: z.array(traceNodeSchema).optional()
-  })
-);
-
 export const simulateResponseSchema = z.object({
   id: z.string(),
   success: z.boolean(),
   exitCode: z.number(),
   durationMillis: z.number(),
   trace: z.string(),
-  structuredTrace: z.array(traceNodeSchema).optional(),
   erc20Transfers: z.array(erc20TransferSchema).optional(),
   balanceAnalysis: balanceAnalysisSchema.optional(),
   error: z.string().optional()

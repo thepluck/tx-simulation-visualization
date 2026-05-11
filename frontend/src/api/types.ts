@@ -13,6 +13,5 @@ export type {
   SimulationRecord,
   StateOverride,
   TokenBalanceChange,
-  TraceNode,
   UserUSDChange
 } from "./schemas";

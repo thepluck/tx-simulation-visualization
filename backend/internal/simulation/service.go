@@ -284,7 +284,7 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 		"--root", execution.Root,
 		"--rpc-url", anvilRPCURL,
 		"-vvvvv",
-		"--color", "never",
+		"--json",
 		"--non-interactive",
 	)
 	compilerArgs := solidity.ForgeCompilerArgs(req.Compiler)
@@ -309,15 +309,21 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 	resp.Stderr = solidity.RedactRPC(solidity.StripANSI(result.Stderr), rpcURL, req.Chain)
 	resp.Stderr = strings.ReplaceAll(resp.Stderr, anvilRPCURL, "<anvil-rpc-url>")
 	combined := strings.TrimSpace(resp.Stdout + "\n" + resp.Stderr)
-	resp.Trace = solidity.ExtractTrace(combined)
-	resp.StructuredTrace = traceparser.Parse(resp.Trace)
 	resp.ExitCode = result.ExitCode
 	resp.Success = result.Err == nil
-	slog.Info("forge output parsed", "run_id", runID, "trace_bytes", len(resp.Trace), "trace_nodes", len(resp.StructuredTrace))
+	parsed, err := traceparser.ParseOutput(resp.Stdout)
+	if err != nil {
+		resp.Success = false
+		resp.Trace = combined
+		resp.Error = "parse forge json trace: " + err.Error()
+		return finish(http.StatusBadGateway)
+	}
+	resp.Trace = parsed.Trace
+	slog.Info("forge output parsed", "run_id", runID, "trace_bytes", len(resp.Trace), "erc20_transfers", len(parsed.ERC20Transfers))
 	if result.Err != nil {
 		return finish(http.StatusOK)
 	}
-	resp.ERC20Transfers = fundflow.ExtractERC20Transfers(combined)
+	resp.ERC20Transfers = parsed.ERC20Transfers
 	slog.Info("fund flow extracted", "run_id", runID, "erc20_transfers", len(resp.ERC20Transfers))
 	priceMap := s.fetchTokenPrices(ctx, runID, req.Chain, resp.ERC20Transfers)
 	resp.ERC20Transfers = fundflow.EnrichERC20Transfers(resp.ERC20Transfers, priceMap)
@@ -663,8 +669,6 @@ func populateForgeFailure(resp *model.SimulateResponse, start time.Time, result 
 	resp.Stdout = solidity.RedactRPC(solidity.StripANSI(result.Stdout), rpcURL, chain)
 	resp.Stderr = solidity.RedactRPC(solidity.StripANSI(result.Stderr), rpcURL, chain)
 	resp.Trace = strings.TrimSpace(resp.Stdout + "\n" + resp.Stderr)
-	resp.StructuredTrace = traceparser.Parse(resp.Trace)
-	resp.ERC20Transfers = fundflow.ExtractERC20Transfers(resp.Stdout + "\n" + resp.Stderr)
 	resp.ExitCode = result.ExitCode
 	resp.Error = prefix + ": " + err.Error()
 	if result.Err != nil {

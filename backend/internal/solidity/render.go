@@ -219,16 +219,6 @@ func ExtractBytecode(output string) (string, bool) {
 	return bytecode, bytecode != "" && bytecode != "0x" && bytesPattern.MatchString(bytecode)
 }
 
-func ExtractTrace(output string) string {
-	output = strings.TrimSpace(output)
-	for _, marker := range []string{"Traces:", "Trace:"} {
-		if idx := strings.Index(output, marker); idx >= 0 {
-			return strings.TrimSpace(output[idx:])
-		}
-	}
-	return output
-}
-
 func StripANSI(value string) string {
 	return ansiPattern.ReplaceAllString(value, "")
 }

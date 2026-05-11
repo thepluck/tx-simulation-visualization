@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExpandMode } from "../../app/form";
-import { isAddress, looksLikeTraceLabel, resolveAddressReference, resolveLabelAlias, type AddressLabels } from "../../lib/labels";
-import type { TraceNode } from "../../api/types";
+import { isAddress, resolveAddressReference, resolveLabelAlias, type AddressLabels } from "../../lib/labels";
+import type { TraceNode } from "../../lib/traceTypes";
 import AddressReference from "../../components/AddressReference";
 import { highlightSearchText } from "../../components/SearchHighlight";
 import TraceArguments from "./TraceArguments";
@@ -175,7 +175,7 @@ function traceLabel(node: TraceNode, addressLabels: AddressLabels, explorerBaseU
     const addressRef = resolveAddressReference(node.target, addressLabels);
     const suffix = (
       <>
-        ::{highlightSearchText(node.function ?? "call", highlightTerms)}
+        ::<span className="trace-function">{highlightSearchText(node.function ?? "call", highlightTerms)}</span>
         {node.arguments ? (
           <>
             (<TraceArguments addressLabels={addressLabels} explorerBaseUrl={explorerBaseUrl} highlightTerms={highlightTerms} value={node.arguments} />)
@@ -189,7 +189,7 @@ function traceLabel(node: TraceNode, addressLabels: AddressLabels, explorerBaseU
           <AddressReference
             address={addressRef.address}
             addressLabels={addressLabels}
-            displayLabel={addressRef.label}
+            displayLabel={node.targetLabel ?? addressRef.label}
             explorerBaseUrl={explorerBaseUrl}
             highlightTerms={highlightTerms}
           />
@@ -200,11 +200,7 @@ function traceLabel(node: TraceNode, addressLabels: AddressLabels, explorerBaseU
     const target = resolveLabelAlias(node.target ?? "unknown", addressLabels);
     return (
       <>
-        {looksLikeTraceLabel(target) ? (
-          <span className="address-reference-text">{highlightSearchText(target, highlightTerms)}</span>
-        ) : (
-          highlightSearchText(target, highlightTerms)
-        )}
+        {highlightSearchText(target, highlightTerms)}
         {suffix}
       </>
     );
@@ -303,6 +299,7 @@ function traceSearchText(node: TraceNode, addressLabels: AddressLabels): string 
     node.kind,
     node.callType,
     node.target,
+    node.targetLabel,
     targetLabel,
     addressRef?.address,
     node.function,
@@ -318,51 +315,21 @@ function traceSearchText(node: TraceNode, addressLabels: AddressLabels): string 
 }
 
 function mainCallTrace(nodes: TraceNode[]): TraceNode[] {
-  for (let index = nodes.length - 1; index >= 0; index -= 1) {
-    const node = nodes[index];
-    if (isScriptWrapperCall(node)) {
-      const child = scriptMainCall(node.children ?? []);
-      return child ? visibleTrace([child]) : [];
-    }
-    if (node.kind === "call") {
-      return visibleTrace([node]);
-    }
-  }
-  return [];
+  const main = lastCallWithParent(nodes, 0);
+  return main ? visibleTrace([main]) : [];
 }
 
-function scriptMainCall(nodes: TraceNode[]): TraceNode | undefined {
-  const getRecordedLogsIndex = findLastCallFunction(nodes, "getRecordedLogs");
-  if (getRecordedLogsIndex > 0) {
-    return lastDirectCall(nodes.slice(0, getRecordedLogsIndex));
-  }
-  return lastDirectCall(nodes);
-}
-
-function findLastCallFunction(nodes: TraceNode[], name: string): number {
+function lastCallWithParent(nodes: TraceNode[], parent: number): TraceNode | undefined {
   for (let index = nodes.length - 1; index >= 0; index -= 1) {
-    if (isCallFunction(nodes[index], name)) {
-      return index;
+    const child = lastCallWithParent(nodes[index].children ?? [], parent);
+    if (child) {
+      return child;
     }
-  }
-  return -1;
-}
-
-function lastDirectCall(nodes: TraceNode[]): TraceNode | undefined {
-  for (let index = nodes.length - 1; index >= 0; index -= 1) {
-    if (nodes[index].kind === "call") {
+    if (nodes[index].kind === "call" && nodes[index].parent === parent) {
       return nodes[index];
     }
   }
   return undefined;
-}
-
-function isScriptWrapperCall(node: TraceNode): boolean {
-  return node.kind === "call" && node.function === "run" && (node.target ?? "").includes("SimulateTxScript");
-}
-
-function isCallFunction(node: TraceNode, name: string): boolean {
-  return node.kind === "call" && node.function === name;
 }
 
 function visibleTrace(nodes: TraceNode[]): TraceNode[] {

@@ -1,0 +1,19 @@
+export type TraceNode = {
+  raw: string;
+  kind: string;
+  gas?: number;
+  parent?: number | null;
+  target?: string;
+  targetLabel?: string;
+  function?: string;
+  arguments?: string;
+  callType?: string;
+  resultType?: string;
+  value?: string;
+  children?: TraceNode[];
+};
+
+export type TraceAddressLabel = {
+  address: string;
+  label: string;
+};

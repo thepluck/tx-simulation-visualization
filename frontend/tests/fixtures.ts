@@ -38,13 +38,9 @@ export async function routeBaseEndpoints(page: Page) {
 }
 
 export function simulateResponse() {
-  const eventChildren = Array.from({ length: 50 }, (_, index) => ({
-    raw: `emit Transfer(from: WETHOwner: [${owner}], to: TraceRecipient: [${recipient}], value: ${index + 1})`,
-    kind: "event",
-    value: `Transfer(from: WETHOwner: [${owner}], to: TraceRecipient: [${recipient}], value: ${index + 1})`
-  }));
+  const eventCount = 50;
   const transfers = [
-    ...Array.from({ length: 50 }, () => ({
+    ...Array.from({ length: eventCount }, () => ({
       token,
       from: owner,
       to: recipient,
@@ -87,124 +83,7 @@ export function simulateResponse() {
     success: true,
     exitCode: 0,
     durationMillis: 12,
-    trace: "mock trace",
-    structuredTrace: [
-      {
-        raw: "[1000] SimulateTxScript::run()",
-        kind: "call",
-        gas: 1000,
-        target: "SimulateTxScript",
-        function: "run",
-        children: [
-          {
-            raw: `[100] ${token}::approve(${spender}, 1000000000000000000)`,
-            kind: "call",
-            gas: 100,
-            target: token,
-            function: "approve",
-            arguments: `${spender}, 1000000000000000000`
-          },
-          {
-            raw: "[0] VM::recordLogs()",
-            kind: "call",
-            gas: 0,
-            target: "VM",
-            function: "recordLogs"
-          },
-          {
-            raw: `[0] VM::prank(Sender: [${spender}])`,
-            kind: "call",
-            gas: 0,
-            target: "VM",
-            function: "prank",
-            arguments: `Sender: [${spender}]`
-          },
-          {
-            raw: `[400] WETH9::transferFrom(srcToken: WETH9: [${token}], ${owner}, ${recipient}, 1000000000000000000)`,
-            kind: "call",
-            callType: "delegatecall",
-            gas: 400,
-            target: "WETH9",
-            function: "transferFrom",
-            arguments: `srcToken: WETH9: [${token}], ${owner}, ${recipient}, 1000000000000000000, callTarget: [${helper}], ${longBytes}`,
-            children: [
-              {
-                raw: `[40] Sender: [${spender}]::fallback()`,
-                kind: "call",
-                gas: 40,
-                target: `Sender: [${spender}]`,
-                function: "fallback"
-              },
-              {
-                raw: `[60] ${helper}::decode(${longBytes})`,
-                kind: "call",
-                callType: "staticcall",
-                gas: 60,
-                target: helper,
-                function: "decode",
-                arguments: longBytes,
-                children: [
-                  {
-                    raw: "← [Revert] helper decode failed",
-                    kind: "revert",
-                    resultType: "Revert",
-                    value: "helper decode failed"
-                  }
-                ]
-              },
-              {
-                raw: "[70] MetaAggregationRouterV2::swap()",
-                kind: "call",
-                gas: 70,
-                target: "MetaAggregationRouterV2",
-                function: "swap"
-              },
-              {
-                raw: "[75] SearchOnlyAlias::inspect()",
-                kind: "call",
-                gas: 75,
-                target: "SearchOnlyAlias",
-                function: "inspect"
-              },
-              {
-                raw: `[80] UnmappedToken::transfer(${recipient}, 1000000000000000000)`,
-                kind: "call",
-                gas: 80,
-                target: "UnmappedToken",
-                function: "transfer",
-                arguments: `${recipient}, 1000000000000000000`
-              },
-              ...eventChildren,
-              {
-                raw: "← [Stop]",
-                kind: "stop",
-                resultType: "Stop",
-                value: "← [Stop]"
-              },
-              {
-                raw: "← [Return]",
-                kind: "return"
-              }
-            ]
-          },
-          {
-            raw: "[0] VM::getRecordedLogs()",
-            kind: "call",
-            gas: 0,
-            target: "VM",
-            function: "getRecordedLogs"
-          },
-          {
-            raw: "[0] console2::log(TXSIM_LOG|0x0000000000000000000000000000000000000000|3)",
-            kind: "call",
-            gas: 0,
-            target: "console2",
-            function: "log",
-            arguments: "TXSIM_LOG|0x0000000000000000000000000000000000000000|3"
-          }
-        ]
-      }
-    ],
+    trace: forgeTraceFixture(eventCount),
     erc20Transfers: transfers,
     balanceAnalysis: {
       changes: [
@@ -236,5 +115,179 @@ export function simulateResponse() {
         }
       ]
     }
+  };
+}
+
+function forgeTraceFixture(eventCount: number): string {
+  return JSON.stringify({
+    logs: [],
+    returns: {},
+    success: true,
+    raw_logs: [],
+    traces: [
+      [
+        "Execution",
+        {
+          arena: [
+            forgeCallNode({
+              idx: 0,
+              children: [1, 2],
+              address: "0x9999999999999999999999999999999999999999",
+              signature:
+                "run((address,string)[],(address,address,uint256)[],(address,address,address,uint256)[],(address,address,address,uint256)[],bytes,address,address,bytes)",
+              args: ["0x"],
+              gasUsed: 1000,
+              status: "Stop",
+              ordering: [{ Call: 0 }, { Call: 1 }]
+            }),
+            forgeCallNode({
+              idx: 1,
+              parent: 0,
+              address: token,
+              label: "WETH9",
+              signature: "approve(address,uint256)",
+              args: [`Sender: [${spender}]`, "1000000000000000000"],
+              gasUsed: 100,
+              status: "Return"
+            }),
+            forgeCallNode({
+              idx: 2,
+              parent: 0,
+              children: [3, 4, 5, 6, 7],
+              address: token,
+              label: "WETH9",
+              kind: "DELEGATECALL",
+              signature: "transferFrom(address,address,uint256)",
+              args: [`srcToken: WETH9: [${token}]`, owner, recipient, "1000000000000000000", `WETH: [${token}]`, `callTarget: [${helper}]`, longBytes],
+              gasUsed: 400,
+              status: "Return",
+              logs: Array.from({ length: eventCount }, (_, index) => transferLog(index + 1)),
+              ordering: [{ Call: 0 }, { Call: 1 }, { Call: 2 }, { Call: 3 }, { Call: 4 }, ...Array.from({ length: eventCount }, (_, index) => ({ Log: index }))]
+            }),
+            forgeCallNode({
+              idx: 3,
+              parent: 2,
+              address: spender,
+              label: "Sender",
+              signature: "fallback()",
+              gasUsed: 40,
+              status: "Return"
+            }),
+            forgeCallNode({
+              idx: 4,
+              parent: 2,
+              address: helper,
+              kind: "STATICCALL",
+              signature: "decode(bytes)",
+              args: [longBytes],
+              gasUsed: 60,
+              status: "Revert",
+              output: "helper decode failed"
+            }),
+            forgeCallNode({
+              idx: 5,
+              parent: 2,
+              address: "0x2222222222222222222222222222222222222222",
+              label: "MetaAggregationRouterV2",
+              signature: "swap()",
+              gasUsed: 70,
+              status: "Return"
+            }),
+            forgeCallNode({
+              idx: 6,
+              parent: 2,
+              address: searchOnlyAccount,
+              label: "SearchOnlyAlias",
+              signature: "inspect()",
+              gasUsed: 75,
+              status: "Return"
+            }),
+            forgeCallNode({
+              idx: 7,
+              parent: 2,
+              address: "0x3333333333333333333333333333333333333333",
+              label: "UnmappedToken",
+              signature: "transfer(address,uint256)",
+              args: [recipient, "1000000000000000000"],
+              gasUsed: 80,
+              status: "Return"
+            })
+          ]
+        }
+      ]
+    ],
+    gas_used: 1000,
+    labeled_addresses: {},
+    returned: "0x",
+    address: null
+  });
+}
+
+function forgeCallNode(options: {
+  address: string;
+  args?: unknown[];
+  children?: number[];
+  gasUsed: number;
+  idx: number;
+  kind?: string;
+  label?: string;
+  logs?: unknown[];
+  ordering?: unknown[];
+  output?: string;
+  parent?: number;
+  signature: string;
+  status: string;
+}) {
+  return {
+    parent: options.parent ?? null,
+    children: options.children ?? [],
+    idx: options.idx,
+    trace: {
+      depth: options.parent === undefined ? 0 : options.parent === 0 ? 1 : 2,
+      success: options.status !== "Revert",
+      caller: owner,
+      address: options.address,
+      kind: options.kind ?? "CALL",
+      value: "0x0",
+      data: "0x",
+      output: options.output ?? "0x",
+      gas_used: options.gasUsed,
+      gas_limit: 1000000,
+      status: options.status,
+      steps: [],
+      decoded: {
+        label: options.label ?? "",
+        return_data: "",
+        call_data: {
+          signature: options.signature,
+          args: options.args ?? []
+        }
+      }
+    },
+    logs: options.logs ?? [],
+    ordering: options.ordering ?? []
+  };
+}
+
+function transferLog(value: number) {
+  return {
+    raw_log: {
+      topics: [
+        "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+        `0x000000000000000000000000${owner.slice(2)}`,
+        `0x000000000000000000000000${recipient.slice(2)}`
+      ],
+      data: "0x0000000000000000000000000000000000000000000000000de0b6b3a7640000"
+    },
+    decoded: {
+      name: "Transfer",
+      params: [
+        ["from", `WETHOwner: [${owner}]`],
+        ["to", `TraceRecipient: [${recipient}]`],
+        ["value", `${value}`]
+      ]
+    },
+    position: 0,
+    index: value
   };
 }
