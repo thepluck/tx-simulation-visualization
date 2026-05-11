@@ -136,6 +136,11 @@ button:focus-visible {
   gap: 8px;
 }
 
+.request-id-field input {
+  font-size: 13px;
+  font-weight: 650;
+}
+
 .browse-button,
 .history-button,
 .lookup-button {
