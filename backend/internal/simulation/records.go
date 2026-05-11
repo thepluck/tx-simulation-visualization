@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,7 +32,7 @@ func (s *Service) LoadRecord(id string) (model.SimulationRecord, error) {
 	if err != nil {
 		return model.SimulationRecord{}, err
 	}
-	defer db.Close()
+	defer closeRecordDatabase(db)
 	if err := ensureRecordSchema(db); err != nil {
 		return model.SimulationRecord{}, err
 	}
@@ -88,7 +89,7 @@ func (s *Service) SaveRecord(req model.SimulateRequest, resp model.SimulateRespo
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer closeRecordDatabase(db)
 
 	if err := ensureRecordSchema(db); err != nil {
 		return err
@@ -132,6 +133,12 @@ func openRecordDatabase(workDir string, create bool) (*sql.DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+func closeRecordDatabase(db *sql.DB) {
+	if err := db.Close(); err != nil {
+		slog.Warn("close record database", "error", err)
+	}
 }
 
 func ensureRecordSchema(db *sql.DB) error {
