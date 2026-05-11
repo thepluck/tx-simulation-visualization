@@ -8,14 +8,18 @@ type RequestFormProps = {
   chains: string[];
   error: string;
   form: FormState;
+  isOpeningRequest: boolean;
   isRunning: boolean;
   projectSuggestions: string[];
+  requestLookupId: string;
   requestTab: RequestTab;
   status: HealthStatus;
   theme: ThemeMode;
   onAbort: () => void;
+  onOpenRequest: () => void;
   onProjectBrowsed: (path: string) => void;
   onRequestTabChange: (value: RequestTab) => void;
+  onRequestLookupIdChange: (value: string) => void;
   onSubmit: FormEventHandler<HTMLFormElement>;
   onThemeChange: (value: ThemeMode) => void;
   onUpdate: UpdateForm;
@@ -26,14 +30,18 @@ export default function RequestForm(props: RequestFormProps) {
     chains,
     error,
     form,
+    isOpeningRequest,
     isRunning,
     projectSuggestions,
+    requestLookupId,
     requestTab,
     status,
     theme,
     onAbort,
+    onOpenRequest,
     onProjectBrowsed,
     onRequestTabChange,
+    onRequestLookupIdChange,
     onSubmit,
     onThemeChange,
     onUpdate
@@ -77,6 +85,32 @@ export default function RequestForm(props: RequestFormProps) {
           API URL
           <input value={form.apiUrl} onChange={(event) => onUpdate("apiUrl", event.target.value)} />
         </label>
+
+        <div className="field-block">
+          <label htmlFor="request-id">Request ID</label>
+          <span className="request-id-field">
+            <input
+              id="request-id"
+              value={requestLookupId}
+              placeholder="20260511T120000.000000000-deadbeef"
+              onChange={(event) => onRequestLookupIdChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  onOpenRequest();
+                }
+              }}
+            />
+            <button
+              className="lookup-button"
+              type="button"
+              disabled={isRunning || isOpeningRequest || !requestLookupId.trim()}
+              onClick={onOpenRequest}
+            >
+              {isOpeningRequest ? "Opening..." : "Open"}
+            </button>
+          </span>
+        </div>
 
         <div className="two-col">
           <label>

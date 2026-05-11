@@ -166,3 +166,19 @@ Inside Docker, native project browsing is unavailable because the backend runs i
 The response includes `erc20Transfers`, parsed from ERC20-style `Transfer(from, to, value)` trace events for later fund flow graph construction. Each item contains `token`, `from`, `to`, raw `amount`, and, when metadata is available, `normalizedAmount`, `symbol`, and `logoUrl`.
 
 The response also includes `balanceAnalysis`, which aggregates ERC20 transfers into signed per-user token balance changes. It fetches token decimals and symbols from the configured chain RPC, gets current USD prices from DefiLlama and CoinGecko, and may use DexScreener only for token display metadata such as symbol/logo. Trust Wallet token logo URLs are used as a fallback when the token address can be checksummed. USD values are only calculated when both a price and token decimals are available.
+
+Each accepted simulation is saved under `<work_dir>/<request-id>/` as `request.json` and `response.json`. The response `id` can be used later to reload the exact request and display its previous output:
+
+```sh
+curl http://127.0.0.1:8080/requests/20260511T120000.000000000-deadbeef
+```
+
+The lookup response has this shape:
+
+```json
+{
+  "id": "20260511T120000.000000000-deadbeef",
+  "request": {},
+  "response": {}
+}
+```

@@ -86,6 +86,12 @@ type BrowseProjectResponse struct {
 	Path string `json:"path"`
 }
 
+type SimulationRecord struct {
+	ID       string           `json:"id"`
+	Request  SimulateRequest  `json:"request"`
+	Response SimulateResponse `json:"response"`
+}
+
 type SimulateResponse struct {
 	ID              string           `json:"id"`
 	Success         bool             `json:"success"`

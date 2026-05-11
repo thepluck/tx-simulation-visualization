@@ -111,6 +111,7 @@ func registerOpenAPISchemas(schemas openapi3.Schemas) error {
 		{"ChainsResponse", model.ChainsResponse{}},
 		{"ProjectsResponse", model.ProjectsResponse{}},
 		{"BrowseProjectResponse", model.BrowseProjectResponse{}},
+		{"SimulationRecord", model.SimulationRecord{}},
 		{"SimulateRequest", model.SimulateRequest{}},
 		{"LabelOverride", model.LabelOverride{}},
 		{"ERC20BalanceOverride", model.ERC20BalanceOverride{}},
@@ -279,6 +280,13 @@ func addOpenAPIOperations(spec *openapi3.T) {
 		"BrowseProjectResponse",
 		withErrorResponse(http.StatusBadRequest, "ErrorResponse"),
 	))
+	spec.AddOperation("/requests/{id}", http.MethodGet, getOperation(
+		"Load a saved simulation request and response by request ID",
+		"SimulationRecord",
+		withPathParameter("id", "Simulation request ID returned by /simulate"),
+		withErrorResponse(http.StatusBadRequest, "ErrorResponse"),
+		withErrorResponse(http.StatusNotFound, "ErrorResponse"),
+	))
 
 	op := postOperation(
 		"Run a Forge script simulation and return raw plus structured trace",
@@ -299,6 +307,24 @@ type operationOption func(*openapi3.Operation)
 func withErrorResponse(status int, schemaName string) operationOption {
 	return func(op *openapi3.Operation) {
 		op.Responses.Set(fmt.Sprintf("%d", status), jsonResponse(schemaName, http.StatusText(status)))
+	}
+}
+
+func withPathParameter(name string, description string) operationOption {
+	return func(op *openapi3.Operation) {
+		op.Parameters = append(op.Parameters, &openapi3.ParameterRef{
+			Value: &openapi3.Parameter{
+				Name:        name,
+				In:          "path",
+				Description: description,
+				Required:    true,
+				Schema: &openapi3.SchemaRef{
+					Value: &openapi3.Schema{
+						Type: &openapi3.Types{"string"},
+					},
+				},
+			},
+		})
 	}
 }
 

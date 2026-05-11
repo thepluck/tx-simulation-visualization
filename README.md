@@ -45,6 +45,8 @@ Run the backend and frontend together:
 python3 scripts/dev.py
 ```
 
+After a simulation runs, the UI shows its request ID. Paste that ID into the Request ID field later, or open a URL with `?requestId=<id>`, to reload the saved request and previous output from the backend work directory.
+
 Use custom local ports:
 
 ```sh

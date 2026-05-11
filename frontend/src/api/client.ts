@@ -1,12 +1,18 @@
-import type { ChainConfig, ProjectsResponse, SimulateRequest, SimulateResponse } from "./types";
+import type { ChainConfig, ProjectsResponse, SimulateRequest, SimulateResponse, SimulationRecord } from "./types";
 import type { ZodType } from "zod";
 import {
   browseProjectResponseSchema,
   chainConfigSchema,
   errorResponseSchema,
   projectsResponseSchema,
+  simulationRecordSchema,
   simulateResponseSchema
 } from "./schemas";
+
+export type SimulationRunResult = {
+  requestId: string;
+  response: SimulateResponse;
+};
 
 export async function fetchChainConfig(apiUrl: string): Promise<ChainConfig> {
   const response = await fetch(`${trimSlash(apiUrl)}/chains`);
@@ -40,6 +46,15 @@ export async function browseProject(apiUrl: string): Promise<string> {
   return parsePayload(browseProjectResponseSchema, payload, "browse project").path;
 }
 
+export async function fetchSimulationRecord(apiUrl: string, requestId: string): Promise<SimulationRecord> {
+  const response = await fetch(`${trimSlash(apiUrl)}/requests/${encodeURIComponent(requestId.trim())}`);
+  const payload = await readJSON(response);
+  if (!response.ok) {
+    throw new Error(errorMessage(payload, `request lookup failed: ${response.status}`));
+  }
+  return parsePayload(simulationRecordSchema, payload, "request lookup");
+}
+
 export async function simulate(apiUrl: string, request: SimulateRequest, signal?: AbortSignal): Promise<SimulateResponse> {
   const response = await fetch(`${trimSlash(apiUrl)}/simulate`, {
     method: "POST",
@@ -54,6 +69,11 @@ export async function simulate(apiUrl: string, request: SimulateRequest, signal?
     throw new Error(errorMessage(payload, `simulate request failed: ${response.status}`));
   }
   return parsePayload(simulateResponseSchema, payload, "simulate");
+}
+
+export async function runSimulation(apiUrl: string, request: SimulateRequest, signal?: AbortSignal): Promise<SimulationRunResult> {
+  const response = await simulate(apiUrl, request, signal);
+  return { requestId: response.id, response };
 }
 
 function trimSlash(value: string): string {

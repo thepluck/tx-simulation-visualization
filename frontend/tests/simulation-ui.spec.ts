@@ -74,6 +74,62 @@ test("changes the running action to abort and cancels the active request", async
   await expect(page.getByRole("button", { name: "Run Simulation" })).toBeVisible();
 });
 
+test("loads a saved request by request id", async ({ page }) => {
+  await routeBaseEndpoints(page);
+  const savedRequest = {
+    chain: "mainnet",
+    blockNumber: "23000001",
+    projectPath: "/Users/test/saved-project",
+    labelOverrides: [{ account: owner, label: "SavedOwner" }],
+    erc20BalanceOverrides: [],
+    erc20ApprovalOverrides: [],
+    erc721ApprovalOverrides: [],
+    stateOverride: {
+      contractName: "SavedOverride",
+      source: "pragma solidity ^0.8.0; contract SavedOverride {}"
+    },
+    compiler: {
+      viaIR: false,
+      optimize: true,
+      optimizerRuns: 300,
+      evmVersion: "cancun",
+      revertStrings: "debug"
+    },
+    sender: spender,
+    target: token,
+    data: "0x23b872dd"
+  };
+  await page.route(`${apiURL}/requests/saved-run`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "saved-run",
+        request: savedRequest,
+        response: { ...simulateResponse(), id: "saved-run", durationMillis: 22 }
+      })
+    });
+  });
+
+  await page.goto("/?requestId=saved-run");
+
+  await expect(page.getByLabel("Request ID")).toHaveValue("saved-run");
+  await expect(page.getByLabel("Block")).toHaveValue("23000001");
+  await expect(page.getByLabel("Foundry Project")).toHaveValue("/Users/test/saved-project");
+  await expect(page.getByLabel("Sender")).toHaveValue(spender);
+  await expect(page.getByLabel("Target")).toHaveValue(token);
+  await expect(page.getByLabel("Calldata")).toHaveValue("0x23b872dd");
+  await expect(page.getByText("success | 22ms | exit 0 | saved-run")).toBeVisible();
+
+  await page.getByRole("button", { name: "Override Contract" }).click();
+  await expect(page.getByLabel("Override Contract Name")).toHaveValue("SavedOverride");
+  await expect(page.getByLabel("Override Contract Source")).toHaveValue("pragma solidity ^0.8.0; contract SavedOverride {}");
+  await page.getByRole("button", { name: "Compiler" }).click();
+  await expect(page.getByLabel("Optimizer Runs")).toHaveValue("300");
+  await expect(page.getByLabel("EVM Version")).toHaveValue("cancun");
+  await expect(page.getByLabel("Revert Strings")).toHaveValue("debug");
+});
+
 test("uses configured explorer links and renders only the last main call subtree", async ({ page }) => {
   await routeBaseEndpoints(page);
   await page.route(`${apiURL}/simulate`, async (route) => {
@@ -136,6 +192,7 @@ test("uses configured explorer links and renders only the last main call subtree
 
   await page.getByRole("button", { name: "Run Simulation" }).click();
   await expect(page.getByText("success |")).toBeVisible();
+  await expect(page.getByLabel("Request ID")).toHaveValue("browser-test");
 
   await expect(page.getByRole("img", { name: "Fund flow graph" })).toBeVisible();
   await page.reload();

@@ -10,6 +10,7 @@ export type {
   ProjectsResponse,
   SimulateRequest,
   SimulateResponse,
+  SimulationRecord,
   StateOverride,
   TokenBalanceChange,
   TraceNode,

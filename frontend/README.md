@@ -13,6 +13,8 @@ TXSIM_API_URL=http://127.0.0.1:18080 yarn dev
 
 You can also change the API URL field in the app for one-off local testing.
 
+The Request ID field can reload a saved request and previous output from the backend. The same lookup runs automatically when the page URL includes `?requestId=<id>`.
+
 Docker is available as an optional deployment path from the repo root:
 
 ```bash

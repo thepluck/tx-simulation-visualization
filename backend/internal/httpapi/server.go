@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"path/filepath"
@@ -57,6 +58,7 @@ func (s *Server) Routes() http.Handler {
 	router.Get("/chains", s.handleChains)
 	router.Get("/projects", s.handleProjects)
 	router.Get("/browse/project", s.handleBrowseProject)
+	router.Get("/requests/{id}", s.handleRequestRecord)
 	router.Post("/simulate", s.handleSimulate)
 	router.Options("/*", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
@@ -115,6 +117,23 @@ func (s *Server) handleBrowseProject(w http.ResponseWriter, r *http.Request) {
 	}
 	s.rememberProjectPath(path)
 	writeJSON(w, http.StatusOK, model.BrowseProjectResponse{Path: path})
+}
+
+func (s *Server) handleRequestRecord(w http.ResponseWriter, r *http.Request) {
+	record, err := s.simulator.LoadRecord(chi.URLParam(r, "id"))
+	if errors.Is(err, simulation.ErrInvalidRecordID) {
+		writeJSON(w, http.StatusBadRequest, model.ErrorResponse{Error: err.Error()})
+		return
+	}
+	if errors.Is(err, simulation.ErrRecordNotFound) {
+		writeJSON(w, http.StatusNotFound, model.ErrorResponse{Error: err.Error()})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, model.ErrorResponse{Error: "load request record: " + err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, record)
 }
 
 func (s *Server) handleSimulate(w http.ResponseWriter, r *http.Request) {
