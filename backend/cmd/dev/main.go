@@ -17,25 +17,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/spf13/viper"
+	backendconfig "foundry-tx-simulator/backend/internal/config"
 )
 
 const (
-	defaultHost         = "127.0.0.1"
-	defaultBackendPort  = 8080
-	defaultFrontendPort = 5173
+	defaultHost = backendconfig.DefaultListenHost
 )
-
-var configCandidates = []string{
-	"backend/config.yml",
-	"backend/config.yaml",
-	"backend/config.example.yaml",
-	"backend/config.example.yml",
-	"config.yml",
-	"config.yaml",
-	"config.example.yaml",
-	"config.example.yml",
-}
 
 var colors = map[string]string{
 	"backend":  "\033[36m",
@@ -45,49 +32,6 @@ var colors = map[string]string{
 }
 
 var printMu sync.Mutex
-
-type optionalPort struct {
-	value int
-	set   bool
-}
-
-func (p *optionalPort) Set(value string) error {
-	port, err := parsePort(value)
-	if err != nil {
-		return err
-	}
-	p.value = port
-	p.set = true
-	return nil
-}
-
-func (p *optionalPort) String() string {
-	if !p.set {
-		return ""
-	}
-	return strconv.Itoa(p.value)
-}
-
-type requiredPort int
-
-func (p *requiredPort) Set(value string) error {
-	port, err := parsePort(value)
-	if err != nil {
-		return err
-	}
-	*p = requiredPort(port)
-	return nil
-}
-
-func (p requiredPort) String() string {
-	return strconv.Itoa(int(p))
-}
-
-type devArgs struct {
-	backendPort  optionalPort
-	frontendPort requiredPort
-	host         string
-}
 
 type process struct {
 	name string
@@ -114,8 +58,7 @@ func run() (int, error) {
 		return 1, err
 	}
 
-	args, err := parseArgs(os.Args[1:])
-	if err != nil {
+	if err := parseArgs(os.Args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0, nil
 		}
@@ -125,53 +68,24 @@ func run() (int, error) {
 		return 1, err
 	}
 
-	baseConfigPath, err := resolveBackendConfig(rootDir, os.Getenv("TXSIM_CONFIG"))
+	configPath, err := backendconfig.ResolveConfigPath(rootDir, os.Getenv("TXSIM_CONFIG"))
 	if err != nil {
 		return 1, err
 	}
-	listenAddr, err := readListenAddr(baseConfigPath)
+	cfg, configPath, err := backendconfig.LoadFile(configPath)
 	if err != nil {
 		return 1, err
 	}
-	configHost, configPort, err := parseListenAddr(listenAddr)
+	backendHost, backendPort, err := parseListenAddr(cfg.ListenAddr)
 	if err != nil {
 		return 1, err
 	}
 
-	backendHost := configHost
-	if strings.TrimSpace(args.host) != "" {
-		backendHost = strings.TrimSpace(args.host)
-	}
-	backendPort := configPort
-	if args.backendPort.set {
-		backendPort = args.backendPort.value
-	}
-	frontendHost := defaultHost
-	if strings.TrimSpace(args.host) != "" {
-		frontendHost = strings.TrimSpace(args.host)
-	}
-
-	backendAddr := formatListenAddr(backendHost, backendPort)
+	frontendHost := browserHost(backendHost)
 	backendURL := fmt.Sprintf("http://%s:%d", browserHost(backendHost), backendPort)
-	frontendPort := int(args.frontendPort)
+	frontendPort := cfg.FrontendPort
 
-	var devConfigPath string
-	backendEnv := os.Environ()
-	if args.backendPort.set || strings.TrimSpace(args.host) != "" {
-		devConfigPath, err = writeDevBackendConfig(baseConfigPath, backendAddr)
-		if err != nil {
-			return 1, err
-		}
-		backendEnv = withEnv(backendEnv, "TXSIM_CONFIG", devConfigPath)
-	} else {
-		backendEnv = withEnv(backendEnv, "TXSIM_CONFIG", baseConfigPath)
-	}
-	defer func() {
-		if devConfigPath != "" {
-			_ = os.Remove(devConfigPath)
-		}
-	}()
-
+	backendEnv := withEnv(os.Environ(), "TXSIM_CONFIG", configPath)
 	frontendEnv := withEnv(os.Environ(), "TXSIM_API_URL", backendURL)
 	frontendCmd, err := frontendCommand(rootDir, frontendHost, frontendPort)
 	if err != nil {
@@ -205,7 +119,7 @@ func run() (int, error) {
 	}
 
 	interruptCh := make(chan os.Signal, 1)
-	signal.Notify(interruptCh, os.Interrupt)
+	signal.Notify(interruptCh, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(interruptCh)
 
 	select {
@@ -214,36 +128,34 @@ func run() (int, error) {
 		stopProcesses(processes, syscall.SIGTERM)
 		waitForProcesses(processes, resultCh, map[string]bool{result.name: true})
 		return result.status, nil
-	case <-interruptCh:
-		printStatus("\nStopping both servers.")
+	case sig := <-interruptCh:
+		printStatus(fmt.Sprintf("\nStopping both servers after %s.", sig))
 		stopProcesses(processes, syscall.SIGTERM)
 		waitForProcesses(processes, resultCh, nil)
-		return 130, nil
+		return signalExitStatus(sig), nil
 	}
 }
 
-func parseArgs(values []string) (devArgs, error) {
-	args := devArgs{frontendPort: requiredPort(defaultFrontendPort)}
+func parseArgs(values []string) error {
 	flags := flag.NewFlagSet("dev", flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)
 	flags.Usage = func() {
-		fmt.Fprintln(flags.Output(), "Usage: ./dev.sh [options]")
+		fmt.Fprintln(flags.Output(), "Usage: ./dev.sh")
 		fmt.Fprintln(flags.Output(), "")
 		fmt.Fprintln(flags.Output(), "Run the local Foundry Tx Simulator backend and frontend together.")
 		fmt.Fprintln(flags.Output(), "")
-		fmt.Fprintln(flags.Output(), "Options:")
-		flags.PrintDefaults()
+		fmt.Fprintln(flags.Output(), "Configure backend and frontend ports in config.yml.")
 	}
-	flags.Var(&args.backendPort, "backend-port", "override backend port from backend/config.yml")
-	flags.Var(&args.frontendPort, "frontend-port", fmt.Sprintf("frontend port, default: %d", defaultFrontendPort))
-	flags.StringVar(&args.host, "host", "", fmt.Sprintf("override backend bind host from backend/config.yml, default frontend host: %s", defaultHost))
 	if err := flags.Parse(values); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			return args, err
+			return err
 		}
-		return args, err
+		return err
 	}
-	return args, nil
+	if flags.NArg() > 0 {
+		return fmt.Errorf("unexpected arguments: %s", strings.Join(flags.Args(), " "))
+	}
+	return nil
 }
 
 func parsePort(value string) (int, error) {
@@ -299,43 +211,10 @@ func frontendCommand(rootDir string, host string, port int) ([]string, error) {
 	return append([]string{"yarn", "dev"}, viteArgs...), nil
 }
 
-func resolveBackendConfig(rootDir string, configured string) (string, error) {
-	configured = strings.TrimSpace(configured)
-	if configured != "" {
-		candidate, err := expandHome(configured)
-		if err != nil {
-			return "", err
-		}
-		if !filepath.IsAbs(candidate) {
-			candidate = filepath.Join(rootDir, candidate)
-		}
-		if fileExists(candidate) {
-			return candidate, nil
-		}
-		return "", fmt.Errorf("TXSIM_CONFIG points to missing config: %s", candidate)
-	}
-
-	for _, relativePath := range configCandidates {
-		candidate := filepath.Join(rootDir, relativePath)
-		if fileExists(candidate) {
-			return candidate, nil
-		}
-	}
-	return "", fmt.Errorf("backend config is required; create backend/config.yml or set TXSIM_CONFIG")
-}
-
-func readListenAddr(configPath string) (string, error) {
-	config := newDevConfigViper(configPath)
-	if err := config.ReadInConfig(); err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(config.GetString("listen_addr")), nil
-}
-
 func parseListenAddr(value string) (string, int, error) {
 	value = strings.Trim(strings.TrimSpace(value), "\"'")
 	if value == "" {
-		return defaultHost, defaultBackendPort, nil
+		return parseListenAddr(backendconfig.DefaultListenAddr)
 	}
 	if strings.HasPrefix(value, ":") {
 		port, err := parsePort(value[1:])
@@ -355,14 +234,7 @@ func parseListenAddr(value string) (string, int, error) {
 		}
 		return host, port, err
 	}
-	return value, defaultBackendPort, nil
-}
-
-func formatListenAddr(host string, port int) string {
-	if strings.Contains(host, ":") && !strings.HasPrefix(host, "[") {
-		return fmt.Sprintf("[%s]:%d", host, port)
-	}
-	return fmt.Sprintf("%s:%d", host, port)
+	return value, backendconfig.DefaultBackendPort, nil
 }
 
 func browserHost(host string) string {
@@ -372,27 +244,6 @@ func browserHost(host string) string {
 	default:
 		return strings.Trim(host, "[]")
 	}
-}
-
-func writeDevBackendConfig(configPath string, listenAddr string) (string, error) {
-	config := newDevConfigViper(configPath)
-	if err := config.ReadInConfig(); err != nil {
-		return "", err
-	}
-	config.Set("listen_addr", listenAddr)
-
-	path := filepath.Join(filepath.Dir(configPath), fmt.Sprintf(".dev-config-%d.yml", os.Getpid()))
-	if err := config.WriteConfigAs(path); err != nil {
-		return "", err
-	}
-	return path, nil
-}
-
-func newDevConfigViper(configPath string) *viper.Viper {
-	config := viper.New()
-	config.SetConfigFile(configPath)
-	config.SetDefault("listen_addr", fmt.Sprintf("%s:%d", defaultHost, defaultBackendPort))
-	return config
 }
 
 func startProcess(name string, cwd string, command []string, env []string) (*process, error) {
@@ -486,6 +337,13 @@ func normalizeExitStatus(err error) int {
 	return exitErr.ExitCode()
 }
 
+func signalExitStatus(sig os.Signal) int {
+	if systemSignal, ok := sig.(syscall.Signal); ok {
+		return 128 + int(systemSignal)
+	}
+	return 130
+}
+
 func withEnv(env []string, key string, value string) []string {
 	prefix := key + "="
 	out := make([]string, 0, len(env)+1)
@@ -501,18 +359,4 @@ func withEnv(env []string, key string, value string) []string {
 func fileExists(path string) bool {
 	stat, err := os.Stat(path)
 	return err == nil && !stat.IsDir()
-}
-
-func expandHome(path string) (string, error) {
-	if path != "~" && !strings.HasPrefix(path, "~/") {
-		return path, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	if path == "~" {
-		return home, nil
-	}
-	return filepath.Join(home, strings.TrimPrefix(path, "~/")), nil
 }

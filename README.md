@@ -28,7 +28,7 @@ Create local config files from examples:
 
 ```sh
 cp .env.example .env
-cp backend/config.example.yaml backend/config.yml
+cp config.example.yaml config.yml
 ```
 
 Fill in RPC URLs in `.env`, then start both servers:
@@ -45,13 +45,7 @@ Run the backend and frontend together:
 ./dev.sh
 ```
 
-Use custom local ports:
-
-```sh
-./dev.sh --backend-port 18080 --frontend-port 15173
-```
-
-The script also points the frontend's default API URL at the selected backend port.
+Set local ports in `config.yml`; `./dev.sh` reads that file and points the frontend at the configured backend address.
 
 Run the backend directly:
 
@@ -72,11 +66,12 @@ When run directly, the local frontend defaults to `http://127.0.0.1:8080` for th
 
 ## Configuration
 
-Backend settings are read from YAML config. `backend/config.yml` is the local config, and `backend/config.example.yaml` is the template for new configs. `./dev.sh` uses `backend/config.yml` by default; direct backend runs from `backend/` find it automatically.
+App settings are read from YAML config. `config.yml` is the local config, and `config.example.yaml` is the template for new configs. `./dev.sh` uses `config.yml` by default; direct backend runs from `backend/` find `../config.yml` automatically.
 
 ```yaml
 listen_addr: "127.0.0.1:8080"
-work_dir: ".runs"
+frontend_port: 5173
+work_dir: "backend/.runs"
 anvil_port_start: 18545
 rpc_urls:
   mainnet: "${MAINNET_RPC_URL}"
@@ -89,7 +84,7 @@ cd backend
 TXSIM_CONFIG=/path/to/config.yml go run ./cmd/server
 ```
 
-The backend loads `.env` from the repo root and `backend/.env`, but environment values are only used when the YAML explicitly references them with `${...}`. For example, `MAINNET_RPC_URL` is read because `backend/config.yml` uses `${MAINNET_RPC_URL}` under `rpc_urls`; a plain `MAINNET_RPC_URL` environment variable does not override a literal YAML URL.
+The backend loads `.env` from the repo root and `backend/.env`. YAML config fields only use environment values when the YAML explicitly references them with `${...}`. For example, `MAINNET_RPC_URL` is applied because `config.yml` uses `${MAINNET_RPC_URL}` under `rpc_urls`; a plain `MAINNET_RPC_URL` environment variable does not override a literal YAML URL.
 
 Use `.env.example` as the template for `.env`. Put secrets and machine-specific values in `.env`:
 
@@ -109,13 +104,13 @@ rpc_urls:
   mainnet: "${MAINNET_RPC_URL}"
 ```
 
-Use YAML fields such as `listen_addr`, `work_dir`, `max_concurrent_runs`, `anvil_port_start`, `rpc_urls`, `explorer_urls`, and `etherscan_api_key` for backend settings. Use `TXSIM_FRONTEND_PORT` for the Vite frontend port and `TXSIM_API_URL` when the browser should call a specific backend URL. `./dev.sh --backend-port` writes a temporary YAML config so local port args keep working without backend env overrides.
+Use YAML fields such as `listen_addr`, `frontend_port`, `work_dir`, `max_concurrent_runs`, `anvil_port_start`, `rpc_urls`, `explorer_urls`, and `etherscan_api_key` for backend and `./dev.sh` settings. Runtime-only environment variables such as `COINGECKO_API_KEY` are still read directly by the code that needs them. `TXSIM_API_URL` is still available when running the frontend directly and the browser should call a specific backend URL.
 
 For local deployment without Docker:
 
 ```sh
 (cd backend && go run ./cmd/server)
-(cd frontend && TXSIM_FRONTEND_PORT=15173 TXSIM_API_URL=http://127.0.0.1:8080 yarn dev)
+(cd frontend && TXSIM_API_URL=http://127.0.0.1:8080 yarn dev)
 ```
 
 Local deployment stores recently used Foundry project paths in `backend/.runs/projects.json` by default.

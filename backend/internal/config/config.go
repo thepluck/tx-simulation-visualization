@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 type Config struct {
 	ListenAddr       string            `mapstructure:"listen_addr" yaml:"listen_addr"`
+	FrontendPort     int               `mapstructure:"frontend_port" yaml:"frontend_port"`
 	RepoRoot         string            `mapstructure:"repo_root" yaml:"repo_root"`
 	ProjectRoots     []string          `mapstructure:"project_roots" yaml:"project_roots"`
 	WorkDir          string            `mapstructure:"work_dir" yaml:"work_dir"`
@@ -27,15 +29,25 @@ type Config struct {
 	ExplorerURLs     map[string]string `mapstructure:"explorer_urls" yaml:"explorer_urls"`
 }
 
+const (
+	DefaultListenHost   = "127.0.0.1"
+	DefaultBackendPort  = 8080
+	DefaultListenAddr   = "127.0.0.1:8080"
+	DefaultFrontendPort = 5173
+)
+
 var configCandidates = []string{
-	"config.yaml",
 	"config.yml",
-	"backend/config.yaml",
-	"backend/config.yml",
-	"config.example.yaml",
+	"config.yaml",
 	"config.example.yml",
-	"backend/config.example.yaml",
-	"backend/config.example.yml",
+	"config.example.yaml",
+}
+
+var parentConfigCandidates = []string{
+	"../config.yml",
+	"../config.yaml",
+	"../config.example.yml",
+	"../config.example.yaml",
 }
 
 func Load() (Config, string, error) {
@@ -43,7 +55,10 @@ func Load() (Config, string, error) {
 	if err != nil {
 		return Config{}, "", err
 	}
+	return LoadFile(path)
+}
 
+func LoadFile(path string) (Config, string, error) {
 	v := newConfigViper(path)
 	if err := v.ReadInConfig(); err != nil {
 		return Config{}, "", err
@@ -94,6 +109,9 @@ func Load() (Config, string, error) {
 	if cfg.MaxConcurrent < 0 {
 		return Config{}, "", errors.New("max_concurrent_runs must be positive")
 	}
+	if cfg.FrontendPort <= 0 {
+		return Config{}, "", errors.New("frontend_port must be positive")
+	}
 	cfg.ForgeBin = strings.TrimSpace(cfg.ForgeBin)
 	cfg.AnvilBin = strings.TrimSpace(cfg.AnvilBin)
 	cfg.AnvilHost = strings.TrimSpace(cfg.AnvilHost)
@@ -118,24 +136,52 @@ func resolveConfigPath() (string, error) {
 	if err := env.BindEnv("config", "TXSIM_CONFIG"); err != nil {
 		return "", err
 	}
-	if path := strings.TrimSpace(env.GetString("config")); path != "" {
-		return path, nil
+	return ResolveConfigPath("", env.GetString("config"))
+}
+
+func ResolveConfigPath(baseDir string, configured string) (string, error) {
+	configured = strings.TrimSpace(configured)
+	if configured != "" {
+		candidate, err := expandHomePath(configured)
+		if err != nil {
+			return "", err
+		}
+		if !filepath.IsAbs(candidate) && strings.TrimSpace(baseDir) != "" {
+			candidate = filepath.Join(baseDir, candidate)
+		}
+		if stat, err := os.Stat(candidate); err == nil && !stat.IsDir() {
+			return candidate, nil
+		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+		return "", fmt.Errorf("TXSIM_CONFIG points to missing config: %s", candidate)
 	}
 
-	for _, candidate := range configCandidates {
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate, nil
+	candidates := configCandidates
+	if strings.TrimSpace(baseDir) == "" {
+		candidates = append(append([]string{}, configCandidates...), parentConfigCandidates...)
+	}
+	for _, candidate := range candidates {
+		path := candidate
+		if strings.TrimSpace(baseDir) != "" {
+			path = filepath.Join(baseDir, candidate)
+		}
+		if stat, err := os.Stat(path); err == nil && !stat.IsDir() {
+			return path, nil
+		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "", err
 		}
 	}
-	return "", errors.New("set TXSIM_CONFIG or create backend/config.yml")
+	return "", fmt.Errorf("set TXSIM_CONFIG or create one of: %s", strings.Join(candidates, ", "))
 }
 
 func newConfigViper(path string) *viper.Viper {
 	v := viper.New()
 	v.SetConfigFile(path)
-	v.SetDefault("listen_addr", "127.0.0.1:8080")
-	v.SetDefault("repo_root", "..")
-	v.SetDefault("work_dir", ".runs")
+	v.SetDefault("listen_addr", DefaultListenAddr)
+	v.SetDefault("frontend_port", DefaultFrontendPort)
+	v.SetDefault("repo_root", ".")
+	v.SetDefault("work_dir", "backend/.runs")
 	v.SetDefault("timeout_seconds", 300)
 	v.SetDefault("max_concurrent_runs", 1)
 	v.SetDefault("forge_bin", "forge")

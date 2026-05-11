@@ -38,9 +38,9 @@ Set the local backend listen address in YAML:
 listen_addr: "127.0.0.1:18080"
 ```
 
-The server loads config from `TXSIM_CONFIG` when set. Otherwise it searches from the current working directory for `config.yaml`, `config.yml`, `backend/config.yaml`, `backend/config.yml`, `config.example.yaml`, `config.example.yml`, `backend/config.example.yaml`, then `backend/config.example.yml`. Direct `go run` commands from `backend/` find `backend/config.yml` as the local `config.yml`; `./dev.sh` uses it by default.
+The server loads config from `TXSIM_CONFIG` when set. Otherwise it searches from the current working directory for `config.yml`, `config.yaml`, `config.example.yml`, and `config.example.yaml`; direct `go run` commands from `backend/` also check the same names in `..`. `./dev.sh` uses repo-root `config.yml` by default.
 
-Use `backend/config.yml` for local development or `backend/config.example.yaml` as a template for another config file. The backend loads `.env` from the repo root and `backend/.env` with `gotenv`, but environment values are only used when the YAML explicitly references them with `${...}`.
+Use repo-root `config.yml` for local development or `config.example.yaml` as a template for another config file. The backend loads `.env` from the repo root and `backend/.env` with `gotenv`. YAML config fields only use environment values when the YAML explicitly references them with `${...}`.
 
 Use the repo-root `.env.example` as the template for `.env`. Put secrets and machine-specific values in `.env`:
 
@@ -60,12 +60,13 @@ rpc_urls:
   mainnet: "${MAINNET_RPC_URL}"
 ```
 
-Backend runtime settings live in YAML:
+Backend runtime settings and `./dev.sh` settings live in YAML:
 
 ```yaml
 listen_addr: "127.0.0.1:8080"
-work_dir: ".runs"
-project_cache_path: ".runs/projects.json"
+frontend_port: 5173
+work_dir: "backend/.runs"
+project_cache_path: "backend/.runs/projects.json"
 timeout_seconds: 300
 max_concurrent_runs: 1
 forge_bin: "forge"
@@ -79,7 +80,7 @@ explorer_urls:
   mainnet: "https://etherscan.io"
 ```
 
-Chain RPC endpoints are read from the YAML `rpc_urls` map. `explorer_urls` maps the same chain names to block explorer base URLs for frontend address links. `etherscan_api_key` is backend-side only and maps to `forge script --etherscan-api-key`; set it directly in YAML or use `${ETHERSCAN_API_KEY}`. Set `COINGECKO_API_KEY` in `.env` if you want CoinGecko requests to include a demo API key.
+Chain RPC endpoints are read from the YAML `rpc_urls` map. `explorer_urls` maps the same chain names to block explorer base URLs for frontend address links. `etherscan_api_key` is backend-side only and maps to `forge script --etherscan-api-key`; set it directly in YAML or use `${ETHERSCAN_API_KEY}`. `frontend_port` controls the Vite server when using `./dev.sh`. Set `COINGECKO_API_KEY` in `.env` if you want CoinGecko requests to include a demo API key.
 
 `project_cache_path` stores recently used Foundry project paths. Local runs default to `backend/.runs/projects.json`; Docker uses `/data/runs/projects.json`, which is persisted by the `backend-runs` volume.
 
