@@ -141,6 +141,7 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 	start := time.Now()
 	runID := runid.New()
 	resp := model.SimulateResponse{ID: runID}
+	runStarted := false
 	finish := func(status int) (model.SimulateResponse, int) {
 		attrs := []any{
 			"run_id", runID,
@@ -158,9 +159,9 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 		} else {
 			slog.Info("simulation finished", attrs...)
 		}
-		if resp.RunDir != "" {
-			if err := writeSimulationRecord(resp.RunDir, req, resp); err != nil {
-				slog.Warn("persist simulation record", "run_id", runID, "run_dir", resp.RunDir, "error", err)
+		if runStarted {
+			if err := s.SaveRecord(req, resp); err != nil {
+				slog.Warn("persist simulation record", "run_id", runID, "error", err)
 			}
 		}
 		return resp, status
@@ -204,18 +205,11 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 		return finish(http.StatusTooManyRequests)
 	}
 	slog.Info("simulation worker acquired", "run_id", runID, "worker_id", worker.id, "wait_ms", time.Since(waitStart).Milliseconds())
+	runStarted = true
 	defer func() {
 		release()
 		slog.Info("simulation worker released", "run_id", runID, "worker_id", worker.id)
 	}()
-
-	runDir := filepath.Join(s.cfg.WorkDir, runID)
-	if err := os.MkdirAll(runDir, 0o755); err != nil {
-		resp.Error = "create run directory: " + err.Error()
-		return finish(http.StatusInternalServerError)
-	}
-	resp.RunDir = runDir
-	slog.Info("simulation run directory ready", "run_id", runID, "run_dir", runDir)
 
 	execution, err := s.prepareFoundryExecution(&req, runID)
 	if err != nil {
@@ -253,7 +247,7 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 			}
 		}
 
-		statePath, err := s.writeStateOverrideSource(runDir, &execution, runID, source)
+		statePath, err := s.writeStateOverrideSource(&execution, runID, source)
 		if err != nil {
 			resp.Error = "write state override source: " + err.Error()
 			return finish(http.StatusInternalServerError)
@@ -536,7 +530,7 @@ func (s *Service) buildProjectSrc(ctx context.Context, execution foundryExecutio
 	return s.forge.Run(ctx, args...)
 }
 
-func (s *Service) writeStateOverrideSource(runDir string, execution *foundryExecution, runID string, source string) (string, error) {
+func (s *Service) writeStateOverrideSource(execution *foundryExecution, runID string, source string) (string, error) {
 	if execution.External {
 		statePath := filepath.Join(execution.ScriptDir, "TxSimulationStateOverride_"+safeRunID(runID)+".sol")
 		if err := os.WriteFile(statePath, []byte(source), 0o644); err != nil {
@@ -546,15 +540,15 @@ func (s *Service) writeStateOverrideSource(runDir string, execution *foundryExec
 		return statePath, nil
 	}
 
-	statePath := filepath.Join(runDir, "StateOverride.sol")
-	if execution.Root != "" {
-		stateDir := filepath.Join(execution.Root, ".txsim", safeRunID(runID))
-		if err := os.MkdirAll(stateDir, 0o755); err != nil {
-			return "", err
-		}
-		statePath = filepath.Join(stateDir, "StateOverride.sol")
-		execution.tempFiles = append(execution.tempFiles, stateDir, statePath)
+	stateDir := filepath.Join(execution.Root, ".txsim", safeRunID(runID))
+	if execution.Root == "" {
+		stateDir = filepath.Join(s.cfg.WorkDir, "state-overrides", safeRunID(runID))
 	}
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		return "", err
+	}
+	statePath := filepath.Join(stateDir, "StateOverride.sol")
+	execution.tempFiles = append(execution.tempFiles, stateDir, statePath)
 	if err := os.WriteFile(statePath, []byte(source), 0o644); err != nil {
 		return "", err
 	}

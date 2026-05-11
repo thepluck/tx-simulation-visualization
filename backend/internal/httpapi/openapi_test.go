@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -177,24 +176,22 @@ func TestRequestRecordEndpoint(t *testing.T) {
 	cfg := testConfig(t)
 	server := NewServer(cfg, "")
 	id := "20260511T120000.000000000-deadbeef"
-	runDir := filepath.Join(cfg.WorkDir, id)
-	if err := os.MkdirAll(runDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeTestJSON(t, filepath.Join(runDir, "request.json"), model.SimulateRequest{
+	err := server.simulator.SaveRecord(model.SimulateRequest{
 		Chain:       "mainnet",
 		BlockNumber: "123",
 		Sender:      "0x0000000000000000000000000000000000000001",
 		Target:      "0x0000000000000000000000000000000000000002",
 		Data:        "0x",
-	})
-	writeTestJSON(t, filepath.Join(runDir, "response.json"), model.SimulateResponse{
+	}, model.SimulateResponse{
 		ID:             id,
 		Success:        true,
 		ExitCode:       0,
 		DurationMillis: 12,
 		Trace:          "mock trace",
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/requests/"+id, nil)
 	rec := httptest.NewRecorder()
@@ -269,18 +266,6 @@ func TestDebugHTTPLogsRequestAndResponse(t *testing.T) {
 	}
 	if strings.Contains(output, "secret-key") {
 		t.Fatalf("debug logs should redact etherscan API key:\n%s", output)
-	}
-}
-
-func writeTestJSON(t *testing.T, path string, value any) {
-	t.Helper()
-
-	data, err := json.Marshal(value)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatal(err)
 	}
 }
 

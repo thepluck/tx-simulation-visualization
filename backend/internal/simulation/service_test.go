@@ -419,6 +419,12 @@ func TestSimulatePersistsRequestRecord(t *testing.T) {
 	if record.Request.LabelOverrides[0].Label != "Sender" {
 		t.Fatalf("saved request should include normalized sender label: %#v", record.Request.LabelOverrides)
 	}
+	if _, err := os.Stat(filepath.Join(cfg.WorkDir, recordDatabaseFile)); err != nil {
+		t.Fatalf("record database was not created: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(cfg.WorkDir, resp.ID)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("unexpected per-request record directory: %v", err)
+	}
 }
 
 func TestSimulateDoesNotPersistRecordWhenWorkerUnavailable(t *testing.T) {

@@ -45,7 +45,7 @@ Run the backend and frontend together:
 ./dev.sh
 ```
 
-After a simulation runs, the UI shows its request ID. Paste that ID into the Request ID field later, or open a URL with `?requestId=<id>`, to reload the saved request and previous output from the backend work directory.
+After a simulation runs, the UI shows its request ID. Paste that ID into the Request ID field later, or open a URL with `?requestId=<id>`, to reload the saved request and previous output from the backend record database.
 
 Set local ports in `config.yml`; `./dev.sh` reads that file and points the frontend at the configured backend address.
 
@@ -115,7 +115,7 @@ For local deployment without Docker:
 (cd frontend && TXSIM_API_URL=http://127.0.0.1:8080 yarn dev)
 ```
 
-Local deployment stores recently used Foundry project paths in `backend/.runs/projects.json` by default.
+Local deployment stores saved simulation records in `backend/.runs/records.sqlite` and recently used Foundry project paths in `backend/.runs/projects.json` by default.
 
 ## Docker Run
 
