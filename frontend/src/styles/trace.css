@@ -78,9 +78,6 @@
 }
 
 .trace-tree {
-  --trace-indent: 10px;
-  --trace-marker-size: 16px;
-
   padding: 12px;
 }
 
@@ -89,16 +86,16 @@
   font-size: 15px;
 }
 
-.trace-entry {
+.trace-node {
   border-left: 1px solid var(--border);
-  margin-left: var(--trace-indent);
-  padding-left: var(--trace-indent);
+  margin-left: 10px;
+  padding-left: 10px;
 }
 
-.trace-entry > summary,
-.trace-entry > .trace-leaf {
+.trace-node > summary,
+.trace-leaf {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-start;
   flex-wrap: wrap;
   gap: 8px;
@@ -107,24 +104,24 @@
   padding: 4px 6px;
 }
 
-.trace-entry > summary {
+.trace-node > summary {
   list-style: none;
   cursor: pointer;
 }
 
-.trace-entry > summary:hover,
-.trace-entry > .trace-leaf:hover {
+.trace-node > summary:hover,
+.trace-leaf:hover {
   background: var(--surface-alt);
 }
 
-.trace-entry > summary.trace-search-match,
-.trace-entry > .trace-leaf.trace-search-match {
+.trace-node > summary.trace-search-match,
+.trace-leaf.trace-search-match {
   background: var(--blue-bg);
   outline: 1px solid var(--blue-bg-strong);
 }
 
-.trace-entry > summary.trace-search-active,
-.trace-entry > .trace-leaf.trace-search-active {
+.trace-node > summary.trace-search-active,
+.trace-leaf.trace-search-active {
   background: var(--blue-bg-strong);
   outline: 2px solid var(--blue);
 }
@@ -136,18 +133,16 @@
   padding: 0 1px;
 }
 
-.trace-entry > summary::-webkit-details-marker {
+.trace-node > summary::-webkit-details-marker {
   display: none;
 }
 
-.trace-entry > summary::before {
+.trace-node > summary::before {
   content: "+";
-  box-sizing: border-box;
   display: inline-grid;
-  flex: 0 0 var(--trace-marker-size);
   place-items: center;
-  width: var(--trace-marker-size);
-  height: var(--trace-marker-size);
+  width: 16px;
+  height: 16px;
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--muted);
@@ -161,11 +156,9 @@
   content: "-";
 }
 
-.trace-entry > .trace-leaf::before {
+.trace-leaf::before {
   content: "";
-  box-sizing: border-box;
-  flex: 0 0 var(--trace-marker-size);
-  width: var(--trace-marker-size);
+  width: 16px;
 }
 
 .trace-kind {
@@ -196,72 +189,6 @@
   font-weight: 800;
 }
 
-.function-reference {
-  position: relative;
-  display: inline-flex;
-  width: fit-content;
-}
-
-.function-reference:focus-visible {
-  border-radius: 4px;
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
-
-.function-reference-card {
-  position: fixed;
-  z-index: 20;
-  display: none;
-  grid-template-columns: max-content minmax(0, 1fr) auto;
-  align-items: start;
-  column-gap: 6px;
-  row-gap: 5px;
-  width: min(520px, calc(100vw - 16px));
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--surface);
-  box-shadow: var(--shadow-pop);
-  padding: 6px;
-}
-
-.function-reference.active .function-reference-card {
-  display: inline-grid;
-}
-
-.function-reference-card-row {
-  display: contents;
-  min-width: 0;
-  white-space: normal;
-}
-
-.function-reference-card-label {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1.35;
-  text-transform: uppercase;
-}
-
-.function-reference-card code {
-  display: block;
-  min-width: 0;
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.35;
-  overflow-wrap: normal;
-  white-space: normal;
-  word-break: normal;
-}
-
-.trace-bytes-reference {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  vertical-align: baseline;
-}
-
 .trace-bytes-toggle {
   max-width: 100%;
   border: 0;
@@ -281,49 +208,18 @@
   background: var(--blue-bg-strong);
 }
 
-.trace-bytes-card {
-  position: fixed;
-  z-index: 20;
-  display: none;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 6px;
-  width: min(560px, calc(100vw - 16px));
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--surface);
-  box-shadow: var(--shadow-pop);
-  padding: 6px;
-}
-
-.trace-bytes-reference.active .trace-bytes-card {
-  display: grid;
-}
-
-.trace-bytes-card code {
-  min-width: 0;
+.trace-bytes-toggle.expanded {
+  background: var(--surface-alt);
   color: var(--text);
-  font-size: 13px;
-  font-weight: 700;
-  overflow-wrap: anywhere;
-  white-space: normal;
-  word-break: break-all;
 }
 
 .trace-meta {
-  border-radius: 4px;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.45;
-  padding: 2px 6px;
   white-space: nowrap;
 }
 
-.trace-gas {
-  background: var(--gas-bg);
-  color: var(--gas);
-}
-
 .trace-children {
-  margin-left: var(--trace-indent);
+  margin-left: 10px;
 }

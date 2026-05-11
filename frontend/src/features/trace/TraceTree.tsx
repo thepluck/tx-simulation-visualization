@@ -3,7 +3,6 @@ import type { ExpandMode } from "../../app/form";
 import { isAddress, resolveAddressReference, resolveLabelAlias, type AddressLabels } from "../../lib/labels";
 import type { TraceNode } from "../../lib/traceTypes";
 import AddressReference from "../../components/AddressReference";
-import FunctionReference from "../../components/FunctionReference";
 import { highlightSearchText } from "../../components/SearchHighlight";
 import TraceArguments from "./TraceArguments";
 
@@ -120,27 +119,25 @@ function TraceNodeView(props: {
     <>
       <span className="trace-kind">{highlightSearchText(kind, props.highlightTerms)}</span>
       <span className="trace-main">{main}</span>
-      <span className={meta ? "trace-meta trace-gas" : "trace-meta"}>{highlightSearchText(meta, props.highlightTerms)}</span>
+      <span className="trace-meta">{highlightSearchText(meta, props.highlightTerms)}</span>
     </>
   );
 
   if (!hasChildren) {
     return (
-      <div className="trace-entry">
-        <div
-          className={rowClassName("trace-leaf")}
-          ref={(element) => {
-            rowRef.current = element;
-          }}
-        >
-          {content}
-        </div>
+      <div
+        className={rowClassName("trace-leaf")}
+        ref={(element) => {
+          rowRef.current = element;
+        }}
+      >
+        {content}
       </div>
     );
   }
 
   return (
-    <details className="trace-entry trace-node" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
+    <details className="trace-node" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary
         className={rowClassName("")}
         ref={(element) => {
@@ -178,13 +175,7 @@ function traceLabel(node: TraceNode, addressLabels: AddressLabels, explorerBaseU
     const addressRef = resolveAddressReference(node.target, addressLabels);
     const suffix = (
       <>
-        ::
-        <FunctionReference
-          highlightTerms={highlightTerms}
-          name={node.function ?? "call"}
-          selector={node.selector}
-          signature={node.functionSignature}
-        />
+        ::<span className="trace-function">{highlightSearchText(node.function ?? "call", highlightTerms)}</span>
         {node.arguments ? (
           <>
             (<TraceArguments addressLabels={addressLabels} explorerBaseUrl={explorerBaseUrl} highlightTerms={highlightTerms} value={node.arguments} />)
@@ -312,8 +303,6 @@ function traceSearchText(node: TraceNode, addressLabels: AddressLabels): string 
     targetLabel,
     addressRef?.address,
     node.function,
-    node.functionSignature,
-    node.selector,
     node.arguments,
     node.value,
     node.raw,

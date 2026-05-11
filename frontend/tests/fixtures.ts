@@ -9,7 +9,8 @@ export const recipient = "0x0000000000000000000000000000000000000003";
 export const searchOnlyAccount = "0x0000000000000000000000000000000000000004";
 export const longBytes = `0x${"a".repeat(64)}`;
 export const shortBytes = "0xaaaaaaaa...aaaaaaaa";
-export const helper = "0x1111111111111111111111111111111111111111";
+
+const helper = "0x1111111111111111111111111111111111111111";
 
 export async function routeBaseEndpoints(page: Page) {
   await page.route(`${apiURL}/health`, async (route) => {
@@ -157,7 +158,6 @@ function forgeTraceFixture(eventCount: number): string {
               label: "WETH9",
               kind: "DELEGATECALL",
               signature: "transferFrom(address,address,uint256)",
-              data: "0x23b872dd",
               args: [`srcToken: WETH9: [${token}]`, owner, recipient, "1000000000000000000", `WETH: [${token}]`, `callTarget: [${helper}]`, longBytes],
               gasUsed: 400,
               status: "Return",
@@ -227,7 +227,6 @@ function forgeCallNode(options: {
   address: string;
   args?: unknown[];
   children?: number[];
-  data?: string;
   gasUsed: number;
   idx: number;
   kind?: string;
@@ -250,7 +249,7 @@ function forgeCallNode(options: {
       address: options.address,
       kind: options.kind ?? "CALL",
       value: "0x0",
-      data: options.data ?? "0x",
+      data: "0x",
       output: options.output ?? "0x",
       gas_used: options.gasUsed,
       gas_limit: 1000000,

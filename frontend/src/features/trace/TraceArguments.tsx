@@ -1,10 +1,7 @@
 import { useState } from "react";
-import type { MouseEvent } from "react";
 import { type AddressLabels, isAddress, replaceLabelAliases } from "../../lib/labels";
 import AddressReference from "../../components/AddressReference";
-import CopyIcon from "../../components/CopyIcon";
 import { highlightSearchText } from "../../components/SearchHighlight";
-import { blockFloatingCardEvent, stopFloatingCardEvent, useFloatingCard } from "../../components/useFloatingCard";
 
 type TraceArgumentsProps = {
   addressLabels: AddressLabels;
@@ -36,7 +33,7 @@ export default function TraceArguments(props: TraceArgumentsProps) {
     <>
       {splitArgumentPieces(props.value).map((piece, index) => {
         if (piece.kind === "bytes") {
-          return <BytesReference highlightTerms={props.highlightTerms} key={`${piece.value}-${index}`} value={piece.value} />;
+          return <CollapsibleBytes highlightTerms={props.highlightTerms} key={`${piece.value}-${index}`} value={piece.value} />;
         }
         if (piece.kind === "address") {
           return (
@@ -55,68 +52,23 @@ export default function TraceArguments(props: TraceArgumentsProps) {
   );
 }
 
-function BytesReference(props: { highlightTerms?: string[]; value: string }) {
-  const [copied, setCopied] = useState(false);
-  const { cardRef, cardStyle, closeCard, isActive, referenceRef, toggleCard } = useFloatingCard<HTMLSpanElement, HTMLSpanElement>();
-  const display = shortenBytes(props.value);
-
-  const copyBytes = async (event: MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(props.value);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1200);
-    } catch {
-      setCopied(false);
-    }
-  };
+function CollapsibleBytes(props: { highlightTerms?: string[]; value: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const display = expanded ? props.value : shortenBytes(props.value);
 
   return (
-    <span
-      className={`trace-bytes-reference ${isActive ? "active" : ""}`}
-      onBlur={(event) => {
-        const nextTarget = event.relatedTarget;
-        if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
-          closeCard();
-        }
+    <button
+      aria-label={expanded ? "Collapse bytes argument" : "Expand bytes argument"}
+      className={`trace-bytes-toggle ${expanded ? "expanded" : ""}`}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setExpanded((current) => !current);
       }}
-      ref={referenceRef}
+      type="button"
     >
-      <button
-        aria-expanded={isActive}
-        aria-label={isActive ? "Hide bytes argument" : "Show bytes argument"}
-        className="trace-bytes-toggle"
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          toggleCard();
-        }}
-        type="button"
-      >
-        {highlightSearchText(display, props.highlightTerms)}
-      </button>
-      <span
-        className="trace-bytes-card"
-        onClick={blockFloatingCardEvent}
-        onPointerDown={blockFloatingCardEvent}
-        ref={cardRef}
-        role="tooltip"
-        style={cardStyle}
-      >
-        <code>{props.value}</code>
-        <button
-          aria-label="Copy bytes argument"
-          className={`address-copy-button${copied ? " copied" : ""}`}
-          onClick={copyBytes}
-          onPointerDown={stopFloatingCardEvent}
-          title={copied ? "Copied" : "Copy bytes"}
-          type="button"
-        >
-          <CopyIcon />
-        </button>
-      </span>
-    </span>
+      {highlightSearchText(display, props.highlightTerms)}
+    </button>
   );
 }
 

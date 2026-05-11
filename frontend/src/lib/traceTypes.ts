@@ -6,8 +6,6 @@ export type TraceNode = {
   target?: string;
   targetLabel?: string;
   function?: string;
-  functionSignature?: string;
-  selector?: string;
   arguments?: string;
   callType?: string;
   resultType?: string;

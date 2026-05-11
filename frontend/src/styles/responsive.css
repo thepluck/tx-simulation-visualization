@@ -52,8 +52,8 @@
     flex: 1;
   }
 
-  .trace-entry > summary,
-  .trace-entry > .trace-leaf {
+  .trace-node > summary,
+  .trace-leaf {
     display: grid;
     grid-template-columns: auto auto minmax(0, 1fr);
     align-items: start;
@@ -61,8 +61,8 @@
     row-gap: 4px;
   }
 
-  .trace-entry > summary::before,
-  .trace-entry > .trace-leaf::before {
+  .trace-node > summary::before,
+  .trace-leaf::before {
     grid-column: 1;
     grid-row: 1;
     margin-top: 2px;

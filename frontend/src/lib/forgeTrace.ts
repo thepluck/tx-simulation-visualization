@@ -224,10 +224,7 @@ function arenaNodeToTraceNode(item: ForgeArenaNode, labels: Map<string, string>)
   const trace = item.trace;
   const target = traceTarget(trace);
   const targetLabel = traceTargetLabel(trace, labels);
-  const decodedSignature = traceFunctionSignature(trace);
-  const isFallback = isFallbackSignature(decodedSignature);
-  const functionSignature = isFallback ? "" : decodedSignature;
-  const fn = traceFunction(trace, decodedSignature);
+  const fn = traceFunction(trace);
   const args = traceArguments(trace);
   const callType = trace.kind.trim().toLowerCase();
   return {
@@ -238,8 +235,6 @@ function arenaNodeToTraceNode(item: ForgeArenaNode, labels: Map<string, string>)
     target,
     targetLabel,
     function: fn,
-    functionSignature: functionSignature || undefined,
-    selector: isFallback ? undefined : traceSelector(trace),
     arguments: args || undefined,
     callType: callType || undefined,
     resultType: trace.status || undefined,
@@ -303,28 +298,13 @@ function traceTargetLabel(trace: ForgeCallTrace, labels: Map<string, string>): s
   return trace.decoded?.label.trim() || labels.get(address.toLowerCase()) || undefined;
 }
 
-function traceFunctionSignature(trace: ForgeCallTrace): string {
-  return trace.decoded?.callData?.signature.trim() ?? "";
-}
-
-function traceFunction(trace: ForgeCallTrace, signature = traceFunctionSignature(trace)): string {
+function traceFunction(trace: ForgeCallTrace): string {
+  const signature = trace.decoded?.callData?.signature.trim() ?? "";
   if (signature) {
     const paren = signature.indexOf("(");
     return paren > 0 ? signature.slice(0, paren) : signature;
   }
   return trace.kind.trim().toLowerCase() || "call";
-}
-
-function traceSelector(trace: ForgeCallTrace): string | undefined {
-  const data = trace.data.trim();
-  if (!/^0x[0-9a-fA-F]{8}/.test(data)) {
-    return undefined;
-  }
-  return data.slice(0, 10).toLowerCase();
-}
-
-function isFallbackSignature(signature: string): boolean {
-  return signature.trim().toLowerCase() === "fallback()";
 }
 
 function traceArguments(trace: ForgeCallTrace): string {
