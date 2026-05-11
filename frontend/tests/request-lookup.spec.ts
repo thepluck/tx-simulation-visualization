@@ -117,3 +117,39 @@ test("editing the request id clears a stuck lookup", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Open" })).toBeEnabled();
   releaseLookup();
 });
+
+test("pressing enter does not open a request while simulation is running", async ({ page }) => {
+  await routeBaseEndpoints(page);
+  let lookupCalls = 0;
+  await page.route(`${apiURL}/requests/saved-run`, async (route) => {
+    lookupCalls += 1;
+    await route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "lookup should not run while simulation is active" })
+    });
+  });
+  await page.route(`${apiURL}/simulate`, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(simulateResponse())
+    });
+  });
+
+  await page.goto("/");
+  await page.getByLabel("Request ID").fill("saved-run");
+  await page.getByLabel("Block").fill("23000000");
+  await page.getByLabel("Sender").fill(spender);
+  await page.getByLabel("Target").fill(token);
+  await page.getByLabel("Calldata").fill("0x23b872dd");
+
+  await page.getByRole("button", { name: "Run Simulation" }).click();
+  await expect(page.getByRole("button", { name: "Abort" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open" })).toBeDisabled();
+  await page.getByLabel("Request ID").press("Enter");
+
+  await expect.poll(() => lookupCalls).toBe(0);
+  await expect(page.getByRole("button", { name: "Abort" })).toBeVisible();
+});

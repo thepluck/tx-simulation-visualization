@@ -50,6 +50,7 @@ export default function RequestForm(props: RequestFormProps) {
   } = props;
   const [browseError, setBrowseError] = useState("");
   const [isBrowsingProject, setIsBrowsingProject] = useState(false);
+  const isRequestLookupDisabled = isRunning || isOpeningRequest || !requestLookupId.trim();
 
   const handleBrowseProject = async () => {
     setBrowseError("");
@@ -103,6 +104,9 @@ export default function RequestForm(props: RequestFormProps) {
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   event.preventDefault();
+                  if (isRequestLookupDisabled) {
+                    return;
+                  }
                   onOpenRequest();
                 }
               }}
@@ -110,7 +114,7 @@ export default function RequestForm(props: RequestFormProps) {
             <button
               className="lookup-button"
               type="button"
-              disabled={isRunning || isOpeningRequest || !requestLookupId.trim()}
+              disabled={isRequestLookupDisabled}
               onClick={onOpenRequest}
             >
               {isOpeningRequest ? "Opening..." : "Open"}
