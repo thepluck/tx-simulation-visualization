@@ -4,18 +4,22 @@
   width: fit-content;
 }
 
-.address-reference-text {
+.address-reference-trigger {
   border: 0;
   background: transparent;
-  color: var(--blue);
+  cursor: pointer;
   font: inherit;
-  font-weight: 800;
   padding: 0;
   text-align: inherit;
+}
+
+.address-reference-text {
+  color: var(--blue);
+  font-weight: 800;
   text-decoration: none;
 }
 
-.address-reference:focus-visible {
+.address-reference-trigger:focus-visible {
   border-radius: 4px;
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
@@ -24,7 +28,7 @@
 .address-reference-card {
   position: fixed;
   z-index: 20;
-  display: none;
+  display: inline-flex;
   width: max-content;
   max-width: min(420px, calc(100vw - 16px));
   border: 1px solid var(--border);
@@ -33,10 +37,6 @@
   box-shadow: var(--shadow-pop);
   padding: 6px;
   overflow: hidden;
-}
-
-.address-reference.active .address-reference-card {
-  display: inline-flex;
 }
 
 .address-reference-card-row {

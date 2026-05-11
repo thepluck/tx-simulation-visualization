@@ -4,11 +4,26 @@ export function useFloatingCard<ReferenceElement extends HTMLElement, CardElemen
   const [isActive, setIsActive] = useState(false);
   const [cardStyle, setCardStyle] = useState<CSSProperties>({});
   const cardRef = useRef<CardElement | null>(null);
+  const cardPointerDownRef = useRef(false);
   const referenceRef = useRef<ReferenceElement | null>(null);
 
   const openCard = useCallback(() => setIsActive(true), []);
   const closeCard = useCallback(() => setIsActive(false), []);
   const toggleCard = useCallback(() => setIsActive((current) => !current), []);
+  const keepOpenOnCardPointerDown = useCallback((event: SyntheticEvent) => {
+    cardPointerDownRef.current = true;
+    event.stopPropagation();
+    window.setTimeout(() => {
+      cardPointerDownRef.current = false;
+    }, 0);
+  }, []);
+
+  const shouldCloseOnBlur = useCallback((currentTarget: HTMLElement, nextTarget: EventTarget | null) => {
+    if (cardPointerDownRef.current) {
+      return false;
+    }
+    return !(nextTarget instanceof Node) || (!currentTarget.contains(nextTarget) && !cardRef.current?.contains(nextTarget));
+  }, []);
 
   const positionCard = useCallback(() => {
     const card = cardRef.current;
@@ -91,8 +106,10 @@ export function useFloatingCard<ReferenceElement extends HTMLElement, CardElemen
     cardStyle,
     closeCard,
     isActive,
+    keepOpenOnCardPointerDown,
     openCard,
     referenceRef,
+    shouldCloseOnBlur,
     toggleCard
   };
 }
@@ -102,6 +119,5 @@ export function stopFloatingCardEvent(event: SyntheticEvent) {
 }
 
 export function blockFloatingCardEvent(event: SyntheticEvent) {
-  event.preventDefault();
   event.stopPropagation();
 }

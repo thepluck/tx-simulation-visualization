@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { type AddressLabels, isAddress, replaceLabelAliases } from "../../lib/labels";
 import AddressReference from "../../components/AddressReference";
 import CopyIcon from "../../components/CopyIcon";
@@ -57,7 +58,8 @@ export default function TraceArguments(props: TraceArgumentsProps) {
 
 function BytesReference(props: { highlightTerms?: string[]; value: string }) {
   const [copied, setCopied] = useState(false);
-  const { cardRef, cardStyle, closeCard, isActive, referenceRef, toggleCard } = useFloatingCard<HTMLSpanElement, HTMLSpanElement>();
+  const { cardRef, cardStyle, closeCard, isActive, keepOpenOnCardPointerDown, referenceRef, shouldCloseOnBlur, toggleCard } =
+    useFloatingCard<HTMLSpanElement, HTMLSpanElement>();
   const display = shortenBytes(props.value);
 
   const copyBytes = async (event: MouseEvent<HTMLButtonElement>) => {
@@ -72,12 +74,35 @@ function BytesReference(props: { highlightTerms?: string[]; value: string }) {
     }
   };
 
+  const card = (
+    <span
+      aria-label="Bytes argument details"
+      className="trace-bytes-card"
+      onClick={blockFloatingCardEvent}
+      onPointerDown={keepOpenOnCardPointerDown}
+      ref={cardRef}
+      role="dialog"
+      style={cardStyle}
+    >
+      <code>{props.value}</code>
+      <button
+        aria-label="Copy bytes argument"
+        className={`address-copy-button${copied ? " copied" : ""}`}
+        onClick={copyBytes}
+        onPointerDown={stopFloatingCardEvent}
+        title={copied ? "Copied" : "Copy bytes"}
+        type="button"
+      >
+        <CopyIcon />
+      </button>
+    </span>
+  );
+
   return (
     <span
       className={`trace-bytes-reference ${isActive ? "active" : ""}`}
       onBlur={(event) => {
-        const nextTarget = event.relatedTarget;
-        if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
+        if (shouldCloseOnBlur(event.currentTarget, event.relatedTarget)) {
           closeCard();
         }
       }}
@@ -96,26 +121,7 @@ function BytesReference(props: { highlightTerms?: string[]; value: string }) {
       >
         {highlightSearchText(display, props.highlightTerms)}
       </button>
-      <span
-        className="trace-bytes-card"
-        onClick={blockFloatingCardEvent}
-        onPointerDown={blockFloatingCardEvent}
-        ref={cardRef}
-        role="tooltip"
-        style={cardStyle}
-      >
-        <code>{props.value}</code>
-        <button
-          aria-label="Copy bytes argument"
-          className={`address-copy-button${copied ? " copied" : ""}`}
-          onClick={copyBytes}
-          onPointerDown={stopFloatingCardEvent}
-          title={copied ? "Copied" : "Copy bytes"}
-          type="button"
-        >
-          <CopyIcon />
-        </button>
-      </span>
+      {isActive ? createPortal(card, document.body) : null}
     </span>
   );
 }

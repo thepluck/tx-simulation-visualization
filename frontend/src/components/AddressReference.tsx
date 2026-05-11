@@ -1,4 +1,5 @@
 import { useState, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { explorerAddressUrl } from "../lib/explorer";
 import { shortAddress } from "../lib/format";
 import { labelForAddress, type AddressLabels } from "../lib/labels";
@@ -17,7 +18,8 @@ type AddressReferenceProps = {
 
 export default function AddressReference(props: AddressReferenceProps) {
   const [copied, setCopied] = useState(false);
-  const { cardRef, cardStyle, closeCard, isActive, referenceRef, toggleCard } = useFloatingCard<HTMLSpanElement, HTMLSpanElement>();
+  const { cardRef, cardStyle, closeCard, isActive, keepOpenOnCardPointerDown, referenceRef, shouldCloseOnBlur, toggleCard } =
+    useFloatingCard<HTMLButtonElement, HTMLSpanElement>();
   const label = labelForAddress(props.address, props.addressLabels);
   const displayOverride = label || props.displayLabel?.trim();
   const display = displayOverride || shortAddress(props.address, 8);
@@ -36,67 +38,69 @@ export default function AddressReference(props: AddressReferenceProps) {
     }
   };
 
+  const card = (
+    <span
+      aria-label="Address details"
+      className="address-reference-card"
+      onClick={blockFloatingCardEvent}
+      onPointerDown={keepOpenOnCardPointerDown}
+      ref={cardRef}
+      role="dialog"
+      style={cardStyle}
+    >
+      <span className="address-reference-card-row">
+        {href ? (
+          <a
+            className="address-reference-card-link"
+            href={href}
+            rel="noreferrer"
+            target="_blank"
+            onClick={stopFloatingCardEvent}
+            onPointerDown={stopFloatingCardEvent}
+          >
+            {props.address}
+          </a>
+        ) : (
+          <code>{props.address}</code>
+        )}
+        <button
+          className={`address-copy-button${copied ? " copied" : ""}`}
+          type="button"
+          aria-label={`Copy ${props.address}`}
+          title={copied ? "Copied" : "Copy address"}
+          onClick={copyAddress}
+          onPointerDown={stopFloatingCardEvent}
+        >
+          <CopyIcon />
+        </button>
+      </span>
+    </span>
+  );
+
   return (
     <span
       className={`address-reference ${isActive ? "active" : ""}`}
       onBlur={(event) => {
-        const nextTarget = event.relatedTarget;
-        if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
+        if (shouldCloseOnBlur(event.currentTarget, event.relatedTarget)) {
           closeCard();
         }
       }}
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        toggleCard();
-      }}
-      onKeyDown={(event) => {
-        if (event.key !== "Enter" && event.key !== " ") {
-          return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-        toggleCard();
-      }}
-      ref={referenceRef}
-      tabIndex={0}
     >
-      <span className={`address-reference-text ${className}`}>{highlightSearchText(display, props.highlightTerms)}</span>
-      <span
-        className="address-reference-card"
-        onClick={blockFloatingCardEvent}
-        onPointerDown={blockFloatingCardEvent}
-        ref={cardRef}
-        role="tooltip"
-        style={cardStyle}
+      <button
+        aria-expanded={isActive}
+        aria-haspopup="dialog"
+        className="address-reference-trigger"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          toggleCard();
+        }}
+        ref={referenceRef}
+        type="button"
       >
-        <span className="address-reference-card-row">
-          {href ? (
-            <a
-              className="address-reference-card-link"
-              href={href}
-              rel="noreferrer"
-              target="_blank"
-              onClick={stopFloatingCardEvent}
-              onPointerDown={stopFloatingCardEvent}
-            >
-              {props.address}
-            </a>
-          ) : (
-            <code>{props.address}</code>
-          )}
-          <button
-            className={`address-copy-button${copied ? " copied" : ""}`}
-            type="button"
-            aria-label={`Copy ${props.address}`}
-            title={copied ? "Copied" : "Copy address"}
-            onClick={copyAddress}
-            onPointerDown={stopFloatingCardEvent}
-          >
-            <CopyIcon />
-          </button>
-        </span>
-      </span>
+        <span className={`address-reference-text ${className}`}>{highlightSearchText(display, props.highlightTerms)}</span>
+      </button>
+      {isActive ? createPortal(card, document.body) : null}
     </span>
   );
 }

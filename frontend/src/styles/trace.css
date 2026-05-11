@@ -202,7 +202,16 @@
   width: fit-content;
 }
 
-.function-reference:focus-visible {
+.function-reference-trigger {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: inherit;
+}
+
+.function-reference-trigger:focus-visible {
   border-radius: 4px;
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
@@ -211,7 +220,7 @@
 .function-reference-card {
   position: fixed;
   z-index: 20;
-  display: none;
+  display: inline-grid;
   grid-template-columns: max-content minmax(0, 1fr) auto;
   align-items: start;
   column-gap: 6px;
@@ -222,10 +231,6 @@
   background: var(--surface);
   box-shadow: var(--shadow-pop);
   padding: 6px;
-}
-
-.function-reference.active .function-reference-card {
-  display: inline-grid;
 }
 
 .function-reference-card-row {
@@ -284,7 +289,7 @@
 .trace-bytes-card {
   position: fixed;
   z-index: 20;
-  display: none;
+  display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
   gap: 6px;
@@ -294,10 +299,6 @@
   background: var(--surface);
   box-shadow: var(--shadow-pop);
   padding: 6px;
-}
-
-.trace-bytes-reference.active .trace-bytes-card {
-  display: grid;
 }
 
 .trace-bytes-card code {
