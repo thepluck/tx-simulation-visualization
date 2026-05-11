@@ -38,7 +38,7 @@ Set the local backend listen address in YAML:
 listen_addr: "127.0.0.1:18080"
 ```
 
-The server loads config from `TXSIM_CONFIG` when set. Otherwise it searches from the current working directory for `config.yaml`, `config.yml`, `backend/config.yaml`, `backend/config.yml`, `config.example.yaml`, `config.example.yml`, `backend/config.example.yaml`, then `backend/config.example.yml`. Direct `go run` commands from `backend/` find `backend/config.yml` as the local `config.yml`; `scripts/dev.py` uses it by default.
+The server loads config from `TXSIM_CONFIG` when set. Otherwise it searches from the current working directory for `config.yaml`, `config.yml`, `backend/config.yaml`, `backend/config.yml`, `config.example.yaml`, `config.example.yml`, `backend/config.example.yaml`, then `backend/config.example.yml`. Direct `go run` commands from `backend/` find `backend/config.yml` as the local `config.yml`; `./dev.sh` uses it by default.
 
 Use `backend/config.yml` for local development or `backend/config.example.yaml` as a template for another config file. The backend loads `.env` from the repo root and `backend/.env` with `gotenv`, but environment values are only used when the YAML explicitly references them with `${...}`.
 

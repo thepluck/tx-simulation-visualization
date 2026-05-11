@@ -34,7 +34,7 @@ cp backend/config.example.yaml backend/config.yml
 Fill in RPC URLs in `.env`, then start both servers:
 
 ```sh
-python3 scripts/dev.py
+./dev.sh
 ```
 
 ## Local Run
@@ -42,13 +42,13 @@ python3 scripts/dev.py
 Run the backend and frontend together:
 
 ```sh
-python3 scripts/dev.py
+./dev.sh
 ```
 
 Use custom local ports:
 
 ```sh
-python3 scripts/dev.py --backend-port 18080 --frontend-port 15173
+./dev.sh --backend-port 18080 --frontend-port 15173
 ```
 
 The script also points the frontend's default API URL at the selected backend port.
@@ -72,7 +72,7 @@ When run directly, the local frontend defaults to `http://127.0.0.1:8080` for th
 
 ## Configuration
 
-Backend settings are read from YAML config. `backend/config.yml` is the local config, and `backend/config.example.yaml` is the template for new configs. `scripts/dev.py` uses `backend/config.yml` by default; direct backend runs from `backend/` find it automatically.
+Backend settings are read from YAML config. `backend/config.yml` is the local config, and `backend/config.example.yaml` is the template for new configs. `./dev.sh` uses `backend/config.yml` by default; direct backend runs from `backend/` find it automatically.
 
 ```yaml
 listen_addr: "127.0.0.1:8080"
@@ -109,7 +109,7 @@ rpc_urls:
   mainnet: "${MAINNET_RPC_URL}"
 ```
 
-Use YAML fields such as `listen_addr`, `work_dir`, `max_concurrent_runs`, `anvil_port_start`, `rpc_urls`, `explorer_urls`, and `etherscan_api_key` for backend settings. Use `TXSIM_FRONTEND_PORT` for the Vite frontend port and `TXSIM_API_URL` when the browser should call a specific backend URL. `scripts/dev.py --backend-port` writes a temporary YAML config so local port args keep working without backend env overrides.
+Use YAML fields such as `listen_addr`, `work_dir`, `max_concurrent_runs`, `anvil_port_start`, `rpc_urls`, `explorer_urls`, and `etherscan_api_key` for backend settings. Use `TXSIM_FRONTEND_PORT` for the Vite frontend port and `TXSIM_API_URL` when the browser should call a specific backend URL. `./dev.sh --backend-port` writes a temporary YAML config so local port args keep working without backend env overrides.
 
 For local deployment without Docker:
 
