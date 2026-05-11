@@ -81,7 +81,6 @@ func TestSimulateWETHBalanceApprovalAndTransferFrom(t *testing.T) {
 
 	requireSimulationSuccess(t, status, resp)
 	logResponseIfEnabled(t, resp)
-	requireStructuredTrace(t, resp)
 	if !strings.Contains(resp.Trace, "transferFrom") {
 		t.Fatalf("expected transferFrom in trace, got:\n%s", resp.Trace)
 	}
@@ -124,8 +123,7 @@ func TestSimulateStateOverrideContractDealsWETHBalanceAndApproval(t *testing.T) 
 
 	requireSimulationSuccess(t, status, resp)
 	logResponseIfEnabled(t, resp)
-	requireStructuredTrace(t, resp)
-	for _, want := range []string{"fallback", "approve", "transferFrom"} {
+	for _, want := range []string{"approve", "transferFrom"} {
 		if !strings.Contains(resp.Trace, want) {
 			t.Fatalf("expected %q in trace, got:\n%s", want, resp.Trace)
 		}
@@ -166,7 +164,6 @@ func TestSimulateNFTApprovalAndTransferFrom(t *testing.T) {
 
 	requireSimulationSuccess(t, status, resp)
 	logResponseIfEnabled(t, resp)
-	requireStructuredTrace(t, resp)
 	if !strings.Contains(resp.Trace, "transferFrom") {
 		t.Fatalf("expected transferFrom in trace, got:\n%s", resp.Trace)
 	}
@@ -199,13 +196,7 @@ func TestSimulateReturnsTraceWhenScriptFailsWithoutFundFlow(t *testing.T) {
 	fake := &fakeForgeRunner{
 		results: []forge.Result{
 			{
-				Stdout: `Traces:
-  [1000] SimulateTxScript::run()
-    ├─ [500] WETH9::transfer(0x0000000000000000000000000000000000000003, 1)
-    │   ├─ emit Transfer(from: 0x0000000000000000000000000000000000000001, to: 0x0000000000000000000000000000000000000003, value: 1)
-    │   └─ ← [Revert] ERC20: transfer amount exceeds balance
-    └─ ← [Revert] ERC20: transfer amount exceeds balance
-`,
+				Stdout:   forgeJSONTraceWithCall(false, "transfer"),
 				Stderr:   "Error: script failed\n",
 				ExitCode: 1,
 				Err:      errors.New("exit status 1"),
@@ -234,7 +225,7 @@ func TestSimulateReturnsTraceWhenScriptFailsWithoutFundFlow(t *testing.T) {
 	if fakeAnvil.calls[0].rpcURL != "http://127.0.0.1:8545" || fakeAnvil.calls[0].blockNumber != "1" {
 		t.Fatalf("anvil fork call = %#v", fakeAnvil.calls[0])
 	}
-	if len(fake.calls) != 1 || !hasArgSequence(fake.calls[0], "--rpc-url", "http://127.0.0.1:19000") || containsArg(fake.calls[0], "--fork-block-number") {
+	if len(fake.calls) != 1 || !hasArgSequence(fake.calls[0], "--rpc-url", "http://127.0.0.1:19000") || !containsArg(fake.calls[0], "--json") || containsArg(fake.calls[0], "--fork-block-number") {
 		t.Fatalf("forge should run against worker anvil rpc without fork-block-number: %#v", fake.calls)
 	}
 	if resp.Success {
@@ -246,7 +237,6 @@ func TestSimulateReturnsTraceWhenScriptFailsWithoutFundFlow(t *testing.T) {
 	if resp.Error != "" {
 		t.Fatalf("error = %q, want empty", resp.Error)
 	}
-	requireStructuredTrace(t, resp)
 	if len(resp.ERC20Transfers) != 0 {
 		t.Fatalf("ERC20 transfers should be skipped on script failure: %#v", resp.ERC20Transfers)
 	}
@@ -295,7 +285,7 @@ func TestSimulateExternalProjectBuildsSrcCompilesOverrideAndRunsCopiedScript(t *
 		results: []forge.Result{
 			{Stdout: "build ok\n"},
 			{Stdout: "0x6000\n"},
-			{Stdout: "Traces:\n  [1] SimulateTxScript::run()\n"},
+			{Stdout: forgeJSONTrace()},
 		},
 	}
 	service := NewService(cfg)
@@ -347,6 +337,7 @@ func TestSimulateExternalProjectBuildsSrcCompilesOverrideAndRunsCopiedScript(t *
 		!hasArgSequence(scriptArgs, "--root", projectRoot) ||
 		!hasArgSequence(scriptArgs, "--rpc-url", "http://127.0.0.1:19001") ||
 		!hasArgSequence(scriptArgs, "--etherscan-api-key", "etherscan-test-key") ||
+		!containsArg(scriptArgs, "--json") ||
 		!containsArg(scriptArgs, "0x6000") ||
 		containsArg(scriptArgs, "--fork-block-number") {
 		t.Fatalf("unexpected script args: %#v", scriptArgs)
@@ -387,7 +378,7 @@ func TestSimulatePersistsRequestRecord(t *testing.T) {
 	}
 	fake := &fakeForgeRunner{
 		results: []forge.Result{
-			{Stdout: "Traces:\n  [1] SimulateTxScript::run()\n"},
+			{Stdout: forgeJSONTrace()},
 		},
 	}
 	service := NewService(cfg)
@@ -508,7 +499,7 @@ func TestNormalizeProjectPathExpandsHome(t *testing.T) {
 func logResponseIfEnabled(t *testing.T, resp model.SimulateResponse) {
 	t.Helper()
 
-	if os.Getenv("TXSIM_LOG_RESPONSE") == "1" {
+	if os.Getenv("TXSIM_DEBUG_RESPONSE") == "1" {
 		encoded, err := json.MarshalIndent(resp, "", "  ")
 		if err != nil {
 			t.Fatal(err)
@@ -580,17 +571,6 @@ func requireSimulationSuccess(t *testing.T, status int, resp model.SimulateRespo
 			resp.Stderr,
 			resp.Trace,
 		)
-	}
-}
-
-func requireStructuredTrace(t *testing.T, resp model.SimulateResponse) {
-	t.Helper()
-
-	if len(resp.StructuredTrace) == 0 {
-		t.Fatalf("expected structured trace nodes for raw trace:\n%s", resp.Trace)
-	}
-	if resp.StructuredTrace[0].Kind != "call" {
-		t.Fatalf("expected root call node, got %#v", resp.StructuredTrace[0])
 	}
 }
 
@@ -781,6 +761,93 @@ func uint32Ptr(value uint32) *uint32 {
 	return &value
 }
 
+func forgeJSONTrace() string {
+	return forgeJSONTraceWithCall(true, "transfer")
+}
+
+func forgeJSONTraceWithCall(success bool, function string) string {
+	status := "Return"
+	if !success {
+		status = "Revert"
+	}
+	return fmt.Sprintf(`{
+  "returns": {},
+  "success": %t,
+  "raw_logs": [],
+  "traces": [
+    [
+      "Execution",
+      {
+        "arena": [
+          {
+            "parent": null,
+            "children": [1],
+            "idx": 0,
+            "trace": {
+              "depth": 0,
+              "success": %t,
+              "caller": "0x0000000000000000000000000000000000000000",
+              "address": "0x0000000000000000000000000000000000000001",
+              "kind": "CALL",
+              "value": "0x0",
+              "data": "0x",
+              "output": "0x",
+              "gas_used": 1000,
+              "gas_limit": 1000000,
+              "status": "%s",
+              "steps": [],
+              "decoded": {
+                "label": "SimulateTxScript",
+                "return_data": "",
+                "call_data": {
+                  "signature": "run(bytes)",
+                  "args": ["0x"]
+                }
+              }
+            },
+            "logs": [],
+            "ordering": [{"Call": 0}]
+          },
+          {
+            "parent": 0,
+            "children": [],
+            "idx": 1,
+            "trace": {
+              "depth": 1,
+              "success": %t,
+              "caller": "0x0000000000000000000000000000000000000001",
+              "address": "%s",
+              "kind": "CALL",
+              "value": "0x0",
+              "data": "0x",
+              "output": "0x",
+              "gas_used": 500,
+              "gas_limit": 100000,
+              "status": "%s",
+              "steps": [],
+              "decoded": {
+                "label": "WETH9",
+                "return_data": "",
+                "call_data": {
+                  "signature": "%s(address,uint256)",
+                  "args": ["0x0000000000000000000000000000000000000003", "1"]
+                }
+              }
+            },
+            "logs": [],
+            "ordering": []
+          }
+        ]
+      }
+    ]
+  ],
+  "gas_used": 1500,
+  "labeled_addresses": {},
+  "returned": "0x",
+  "address": null
+}`, success, success, status, success, wethAddress, status, function)
+}
+
 type fakeForgeRunner struct {
 	calls   [][]string
 	results []forge.Result
@@ -898,16 +965,15 @@ func TestTransferFromCalldata(t *testing.T) {
 
 func TestSimulateResponseJSONOmitsInternalFields(t *testing.T) {
 	resp := model.SimulateResponse{
-		ID:              "run",
-		Success:         true,
-		ExitCode:        0,
-		DurationMillis:  1,
-		Trace:           "Traces:",
-		StructuredTrace: []model.TraceNode{{Kind: "call", Raw: "raw"}},
-		Stdout:          "stdout",
-		Stderr:          "stderr",
-		RunDir:          "/tmp/run",
-		ScriptPath:      "/tmp/script.sol",
+		ID:             "run",
+		Success:        true,
+		ExitCode:       0,
+		DurationMillis: 1,
+		Trace:          "Traces:",
+		Stdout:         "stdout",
+		Stderr:         "stderr",
+		RunDir:         "/tmp/run",
+		ScriptPath:     "/tmp/script.sol",
 	}
 
 	encoded, err := json.Marshal(resp)
@@ -920,10 +986,7 @@ func TestSimulateResponseJSONOmitsInternalFields(t *testing.T) {
 			t.Fatalf("response JSON should not include %q: %s", field, payload)
 		}
 	}
-	if strings.Contains(payload, "depth") {
-		t.Fatalf("response JSON should not include trace node depth: %s", payload)
-	}
-	for _, field := range []string{"structuredTrace", "trace", "success"} {
+	for _, field := range []string{"trace", "success"} {
 		if !strings.Contains(payload, field) {
 			t.Fatalf("response JSON should include %q: %s", field, payload)
 		}

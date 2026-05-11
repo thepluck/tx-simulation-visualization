@@ -98,7 +98,6 @@ type SimulateResponse struct {
 	ExitCode        int              `json:"exitCode"`
 	DurationMillis  int64            `json:"durationMillis"`
 	Trace           string           `json:"trace"`
-	StructuredTrace []TraceNode      `json:"structuredTrace,omitempty"`
 	ERC20Transfers  []ERC20Transfer  `json:"erc20Transfers,omitempty"`
 	BalanceAnalysis *BalanceAnalysis `json:"balanceAnalysis,omitempty"`
 	Stdout          string           `json:"-"`
@@ -140,20 +139,6 @@ type TokenBalanceChange struct {
 type UserUSDChange struct {
 	User     string  `json:"user"`
 	USDValue float64 `json:"usdValue"`
-}
-
-type TraceNode struct {
-	Raw        string      `json:"raw"`
-	Kind       string      `json:"kind"`
-	Depth      int         `json:"-"`
-	Gas        uint64      `json:"gas,omitempty"`
-	Target     string      `json:"target,omitempty"`
-	Function   string      `json:"function,omitempty"`
-	Arguments  string      `json:"arguments,omitempty"`
-	CallType   string      `json:"callType,omitempty"`
-	ResultType string      `json:"resultType,omitempty"`
-	Value      string      `json:"value,omitempty"`
-	Children   []TraceNode `json:"children,omitempty"`
 }
 
 type Uint256 string

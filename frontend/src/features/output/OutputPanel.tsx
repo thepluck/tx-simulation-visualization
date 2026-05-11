@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Dispatc
 import type { ExpandMode, OutputView } from "../../app/form";
 import type { AddressLabels } from "../../lib/labels";
 import type { SimulateResponse } from "../../api/types";
+import type { TraceNode } from "../../lib/traceTypes";
 import BalanceAnalysisView from "../balances/BalanceAnalysisView";
 import FundFlowGraph from "../fund-flow/FundFlowGraph";
 import TraceTree from "../trace/TraceTree";
@@ -14,6 +15,7 @@ type OutputPanelProps = {
   outputView: OutputView;
   response: SimulateResponse | null;
   runMeta: string;
+  traceNodes: TraceNode[];
   onExpandDepthChange: Dispatch<SetStateAction<number>>;
   onExpandModeChange: Dispatch<SetStateAction<ExpandMode>>;
   onOutputViewChange: Dispatch<SetStateAction<OutputView>>;
@@ -173,7 +175,7 @@ export default function OutputPanel(props: OutputPanelProps) {
             addressLabels={addressLabels}
             expandDepth={expandDepth}
             explorerBaseUrl={explorerBaseUrl}
-            nodes={response?.structuredTrace ?? []}
+            nodes={props.traceNodes}
             expandMode={expandMode}
             searchMatchIndex={traceMatchIndex}
             searchQuery={traceSearchQuery}

@@ -1,5 +1,6 @@
 import { shortAddress } from "./format";
-import type { ERC20Transfer, LabelOverride, SimulateResponse, TokenBalanceChange, TraceNode } from "../api/types";
+import type { ERC20Transfer, LabelOverride, SimulateResponse, TokenBalanceChange } from "../api/types";
+import type { TraceAddressLabel } from "./traceTypes";
 
 export type AddressLabels = {
   byAddress: Map<string, string>;
@@ -10,9 +11,12 @@ export type AddressReference = {
   label?: string;
 };
 
-const traceLabeledAddressPattern = /([^,()[\]\n]+?):\s*\[(0x[0-9a-fA-F]{40})\]/g;
-
-export function buildAddressLabels(overrides: LabelOverride[], sender?: string, response?: SimulateResponse | null): AddressLabels {
+export function buildAddressLabels(
+  overrides: LabelOverride[],
+  sender?: string,
+  response?: SimulateResponse | null,
+  traceLabels: TraceAddressLabel[] = []
+): AddressLabels {
   const labels: AddressLabels = {
     byAddress: new Map(),
     byLabel: new Map()
@@ -24,7 +28,7 @@ export function buildAddressLabels(overrides: LabelOverride[], sender?: string, 
   if (isAddress(senderAddress) && !labels.byAddress.has(senderAddress)) {
     setAddressLabel(labels, senderAddress, "Sender");
   }
-  addTraceLabels(labels, response);
+  addTraceLabels(labels, traceLabels);
   addResponseLabels(labels, response);
   return labels;
 }
@@ -41,13 +45,6 @@ export function resolveAddressReference(value: string | undefined, labels: Addre
   const trimmed = (value ?? "").trim();
   if (!trimmed) {
     return undefined;
-  }
-  const labeled = parseLabeledAddress(trimmed);
-  if (labeled) {
-    return {
-      address: labeled.address,
-      label: resolveLabelAlias(labeled.label ?? "", labels)
-    };
   }
   if (isAddress(trimmed)) {
     return {
@@ -95,25 +92,6 @@ export function isAddress(value: string): boolean {
   return /^0x[0-9a-fA-F]{40}$/.test(value.trim());
 }
 
-export function parseLabeledAddress(value: string): AddressReference | undefined {
-  const match = value.trim().match(/^(.+?):\s*\[(0x[0-9a-fA-F]{40})\]$/);
-  if (!match) {
-    return undefined;
-  }
-  const label = lastFoundryLabelSegment(match[1]);
-  if (!looksLikeTraceLabel(label)) {
-    return undefined;
-  }
-  return {
-    address: match[2],
-    label
-  };
-}
-
-export function looksLikeTraceLabel(value: string): boolean {
-  return /^[A-Z]/.test(value.trim());
-}
-
 function addResponseLabels(labels: AddressLabels, response: SimulateResponse | null | undefined) {
   for (const transfer of response?.erc20Transfers ?? []) {
     addTokenLabel(labels, transfer);
@@ -123,31 +101,9 @@ function addResponseLabels(labels: AddressLabels, response: SimulateResponse | n
   }
 }
 
-function addTraceLabels(labels: AddressLabels, response: SimulateResponse | null | undefined) {
-  for (const node of response?.structuredTrace ?? []) {
-    addTraceNodeLabels(labels, node);
-  }
-}
-
-function addTraceNodeLabels(labels: AddressLabels, node: TraceNode) {
-  addTraceTextLabels(labels, node.raw);
-  addTraceTextLabels(labels, node.target);
-  addTraceTextLabels(labels, node.arguments);
-  addTraceTextLabels(labels, node.value);
-  for (const child of node.children ?? []) {
-    addTraceNodeLabels(labels, child);
-  }
-}
-
-function addTraceTextLabels(labels: AddressLabels, value: string | undefined) {
-  if (!value) {
-    return;
-  }
-  for (const match of value.matchAll(traceLabeledAddressPattern)) {
-    const label = lastFoundryLabelSegment(match[1]);
-    if (looksLikeTraceLabel(label)) {
-      addAddressLabel(labels, match[2], label, false);
-    }
+function addTraceLabels(labels: AddressLabels, traceLabels: TraceAddressLabel[]) {
+  for (const item of traceLabels) {
+    addAddressLabel(labels, item.address, item.label, false);
   }
 }
 
@@ -182,16 +138,6 @@ function addAddressLabel(labels: AddressLabels, address: string, label: string, 
 
 function normalizeLabel(value: string): string {
   return value.trim().toLowerCase();
-}
-
-function lastFoundryLabelSegment(value: string): string {
-  return (
-    value
-      .split(":")
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .at(-1) ?? value.trim()
-  );
 }
 
 function escapeRegExp(value: string): string {

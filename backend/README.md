@@ -1,6 +1,6 @@
 # Foundry Tx Simulator Backend
 
-Local Go server that accepts simulation parameters, maps `chain` to an RPC URL from config, compiles optional state override Solidity, runs the existing Foundry script with CLI arguments, and returns both the raw Forge trace and a structured trace tree.
+Local Go server that accepts simulation parameters, maps `chain` to an RPC URL from config, compiles optional state override Solidity, runs the existing Foundry script with CLI arguments, and returns the raw Forge JSON trace with backend-derived fund-flow and balance analysis.
 
 ## Run
 
@@ -156,15 +156,15 @@ Inside Docker, native project browsing is unavailable because the backend runs i
 
 `blockNumber`, balances, approvals, and token IDs should be strings when they may exceed JavaScript's safe integer range. Hex strings are accepted for uint fields.
 
-`stateOverride` is optional. When provided, the backend writes the source into the per-request work directory for local runs, or into a temporary file under `<projectPath>/script/` for external-project runs. It then runs `forge inspect <file>:<contractName> bytecode`, passes that creation bytecode as a `run(...)` argument, and executes the simulation script with `forge script`.
+`stateOverride` is optional. When provided, the backend writes the source into the per-request work directory for local runs, or into a temporary file under `<projectPath>/script/` for external-project runs. It then runs `forge inspect <file>:<contractName> bytecode`, passes that creation bytecode as a `run(...)` argument, and executes the simulation script with `forge script --json`.
 
 `chain` selects the upstream fork RPC from config, and `blockNumber` selects the fork block. The backend prepares a worker-owned Anvil instance with those fork settings, then runs Forge against the local Anvil RPC. They are not part of the Solidity script signature.
 
-`projectPath` is optional. When provided, the backend treats it as another Foundry project, runs `forge build src --root <projectPath>`, copies `contracts/src/SimulateTx.s.sol` into a temporary file under `<projectPath>/script/`, runs `forge script` against that copied script with `--root <projectPath>`, then removes the temporary script file. Relative paths are resolved against the backend repo root. Paths beginning with `~` are expanded to the backend process user's home directory before validation.
+`projectPath` is optional. When provided, the backend treats it as another Foundry project, runs `forge build src --root <projectPath>`, copies `contracts/src/SimulateTx.s.sol` into a temporary file under `<projectPath>/script/`, runs `forge script --json` against that copied script with `--root <projectPath>`, then removes the temporary script file. Relative paths are resolved against the backend repo root. Paths beginning with `~` are expanded to the backend process user's home directory before validation.
 
 `compiler` is optional and maps to popular Forge compiler flags. Supported fields are `use`, `offline`, `noAutoDetect`, `viaIR`, `useLiteralContent`, `noMetadata`, `evmVersion`, `optimize`, `optimizerRuns`, and `revertStrings`. The backend only passes `use` and `evmVersion` when they are explicitly provided. The state override `forge inspect` compile and final `forge script` run default `viaIR` and `optimize` to `true`; external-project `forge build src` uses the target project's defaults unless compiler fields are explicitly set.
 
-The response includes `erc20Transfers`, parsed from ERC20-style `Transfer(from, to, value)` trace events for later fund flow graph construction. Each item contains `token`, `from`, `to`, raw `amount`, and, when metadata is available, `normalizedAmount`, `symbol`, and `logoUrl`.
+The response includes `erc20Transfers`, parsed directly from ERC20 `Transfer` logs in the Forge JSON arena for later fund flow graph construction. Logs emitted from delegatecall frames are attributed by walking up the arena parents to the nearest `CALL` frame, so proxy token transfers use the proxy address rather than the implementation address. Each item contains `token`, `from`, `to`, raw `amount`, and, when metadata is available, `normalizedAmount`, `symbol`, and `logoUrl`.
 
 The response also includes `balanceAnalysis`, which aggregates ERC20 transfers into signed per-user token balance changes. It fetches token decimals and symbols from the configured chain RPC, gets current USD prices from DefiLlama and CoinGecko, and may use DexScreener only for token display metadata such as symbol/logo. Trust Wallet token logo URLs are used as a fallback when the token address can be checksummed. USD values are only calculated when both a price and token decimals are available.
 

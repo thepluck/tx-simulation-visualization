@@ -54,8 +54,7 @@ test("changes the running action to abort and cancels the active request", async
           success: true,
           exitCode: 0,
           durationMillis: 1,
-          trace: "mock trace",
-          structuredTrace: []
+          trace: "{}"
         })
       });
     } catch {
@@ -164,7 +163,8 @@ test("uses configured explorer links and renders only the last main call subtree
   await expect(page.locator(".trace-tree")).toContainText("transferFrom");
   await expect(page.locator(".trace-tree")).toContainText("UnmappedToken");
   await expect(page.locator(".trace-tree")).toContainText("Transfer(from:");
-  await expect(page.locator(".trace-tree")).toContainText("callTarget:");
+  await expect(page.locator(".trace-tree")).not.toContainText("callTarget:");
+  await expect(page.locator(".trace-tree")).not.toContainText("WETH:");
   await expect(page.locator(".trace-tree")).not.toContainText("WETH9");
   await expect(page.locator(".trace-tree")).not.toContainText("TraceRecipient");
   await expect(page.locator(".trace-tree")).not.toContainText(`WETHRecipient: [${recipient}]`);
@@ -180,7 +180,8 @@ test("uses configured explorer links and renders only the last main call subtree
   await expect(page.locator(".trace-tree > .trace-node > summary .trace-kind").first()).toHaveText("delegatecall");
   await expect(page.locator(".trace-tree > .trace-node > summary .trace-meta").first()).toHaveText("400 gas");
   await expect(page.locator(".trace-tree .address-reference-text").filter({ hasText: "callTarget" })).toHaveCount(0);
-  await expect(page.locator(`.trace-tree .address-reference-card-link[href="${explorerURL}/address/${token}"]`)).toHaveCount(2);
+  await expect(page.locator(".trace-tree .address-reference-text").filter({ hasText: "srcToken" })).toHaveCount(0);
+  await expect(page.locator(`.trace-tree .address-reference-card-link[href="${explorerURL}/address/${token}"]`)).toHaveCount(3);
   const tokenReference = page
     .locator(".trace-tree .address-reference")
     .filter({ has: page.locator(`.address-reference-card-link[href="${explorerURL}/address/${token}"]`) })
@@ -188,8 +189,8 @@ test("uses configured explorer links and renders only the last main call subtree
   await expect(tokenReference.locator(".address-reference-text")).toHaveText("WETH");
   await expect(page.locator(".trace-tree .address-reference").filter({ hasText: "WETHRecipient" }).first()).toBeVisible();
   await expect(page.locator(".trace-tree .address-reference").filter({ hasText: "Sender" }).first()).toBeVisible();
-  await expect(page.locator(".trace-tree .trace-main > .address-reference-text").filter({ hasText: "UnmappedToken" })).toHaveCount(1);
-  await expect(page.locator(".trace-tree .trace-main > .address-reference-text").filter({ hasText: "MetaAggregationRouterV2" })).toHaveCount(1);
+  await expect(page.locator(".trace-tree .address-reference").filter({ hasText: "UnmappedToken" })).toHaveCount(1);
+  await expect(page.locator(".trace-tree .address-reference").filter({ hasText: "MetaAggregationRouterV2" })).toHaveCount(1);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(flowScrollTop);
   await page.getByLabel("Search trace").fill(searchOnlyAccount);
   await expect(page.locator(".trace-search-count")).toHaveText("1/1");
