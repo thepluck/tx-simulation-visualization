@@ -1,0 +1,170 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to release, for example v0.1.0"
+        required: true
+        type: string
+
+permissions: {}
+
+env:
+  FOUNDRY_PROFILE: ci
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Resolve release tag
+        id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          tag="${REF_NAME}"
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            tag="${INPUT_TAG}"
+          fi
+
+          case "${tag}" in
+            v*) ;;
+            *)
+              echo "Release tag must start with v: ${tag}" >&2
+              exit 1
+              ;;
+          esac
+
+          git rev-parse "${tag}" >/dev/null
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: yarn install --immutable
+
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: yarn playwright install --with-deps chromium
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Run backend tests
+        working-directory: backend
+        run: go test ./...
+
+      - name: Run backend lint
+        working-directory: backend
+        run: make lint
+
+      - name: Run contract format check
+        working-directory: contracts
+        run: forge fmt --check
+
+      - name: Run contract build
+        working-directory: contracts
+        run: forge build --sizes
+
+      - name: Run contract tests
+        working-directory: contracts
+        run: forge test -vvv
+
+      - name: Run frontend lint
+        working-directory: frontend
+        run: yarn lint
+
+      - name: Build frontend
+        working-directory: frontend
+        run: yarn build
+
+      - name: Run browser tests
+        working-directory: frontend
+        run: yarn test:browser
+
+      - name: Validate Docker Compose config
+        run: docker compose config
+
+      - name: Package backend binaries
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          mkdir -p release
+
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            goos="${target%/*}"
+            goarch="${target#*/}"
+            package="foundry-tx-simulator-backend_${RELEASE_TAG}_${goos}_${goarch}"
+            package_dir="release/${package}"
+
+            mkdir -p "${package_dir}"
+            (cd backend && CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" go build -trimpath -ldflags="-s -w" -o "../${package_dir}/txsim-server" ./cmd/server)
+
+            cp README.md config.example.yaml config.docker.yaml docker-compose.yml .env.example "${package_dir}/"
+            mkdir -p "${package_dir}/backend"
+            cp backend/README.md "${package_dir}/backend/README.md"
+            tar \
+              --exclude="contracts/cache" \
+              --exclude="contracts/out" \
+              --exclude="contracts/broadcast" \
+              --exclude="contracts/.txsim" \
+              -cf - contracts | tar -xf - -C "${package_dir}"
+
+            tar -czf "release/${package}.tar.gz" -C release "${package}"
+            rm -rf "${package_dir}"
+          done
+
+      - name: Package frontend dist
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          package="foundry-tx-simulator-frontend_${RELEASE_TAG}"
+          package_dir="release/${package}"
+
+          mkdir -p "${package_dir}/dist"
+          cp -R frontend/dist/. "${package_dir}/dist/"
+          cp frontend/README.md frontend/nginx.conf "${package_dir}/"
+          cp -R frontend/docker-entrypoint.d "${package_dir}/docker-entrypoint.d"
+
+          tar -czf "release/${package}.tar.gz" -C release "${package}"
+          rm -rf "${package_dir}"
+
+      - name: Generate checksums
+        run: |
+          (cd release && sha256sum *.tar.gz > SHA256SUMS)
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          gh release create "${RELEASE_TAG}" release/*.tar.gz release/SHA256SUMS --verify-tag --title "${RELEASE_TAG}" --generate-notes

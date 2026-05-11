@@ -156,6 +156,21 @@ TXSIM_PROJECTS_CONTAINER_PATH=/workspace/projects
 
 The backend expands `~` in `projectPath` and `project_roots`. Docker Compose also resolves `~` in `TXSIM_PROJECTS_HOST_PATH`. The native folder picker remains a local macOS backend feature and is not available inside the Linux container, so Docker users should type or paste the project path.
 
+## Release
+
+Create and push a version tag from `master` to run the release workflow:
+
+```sh
+git checkout master
+git pull --ff-only origin master
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow validates the backend, contracts, frontend, and Docker Compose config before publishing release artifacts. It uploads backend server archives for Linux and macOS, a frontend `dist` archive, and `SHA256SUMS`.
+
+Use the manual Release workflow dispatch only when re-running release creation for an existing `v*` tag.
+
 ## Foundry Contracts
 
 The local simulation script and its Foundry project live in `contracts/`.
