@@ -1,4 +1,4 @@
-import { useState, type FormEventHandler } from "react";
+import { useRef, useState, type ChangeEventHandler, type FormEventHandler } from "react";
 import { browseProject } from "../../api/client";
 import type { FormState, HealthStatus, RequestTab, ThemeMode, UpdateForm } from "../../app/form";
 import ProjectHistoryDropdown from "./ProjectHistoryDropdown";
@@ -8,6 +8,7 @@ type RequestFormProps = {
   chains: string[];
   error: string;
   form: FormState;
+  canExport: boolean;
   isOpeningRequest: boolean;
   isRunning: boolean;
   projectSuggestions: string[];
@@ -16,6 +17,10 @@ type RequestFormProps = {
   status: HealthStatus;
   theme: ThemeMode;
   onAbort: () => void;
+  onExportCopy: () => void;
+  onExportFile: () => void;
+  onImportFile: (file: File) => void;
+  onImportPaste: (text: string) => void;
   onOpenRequest: () => void;
   onProjectBrowsed: (path: string) => void;
   onReload: () => void;
@@ -31,6 +36,7 @@ export default function RequestForm(props: RequestFormProps) {
     chains,
     error,
     form,
+    canExport,
     isOpeningRequest,
     isRunning,
     projectSuggestions,
@@ -39,6 +45,10 @@ export default function RequestForm(props: RequestFormProps) {
     status,
     theme,
     onAbort,
+    onExportCopy,
+    onExportFile,
+    onImportFile,
+    onImportPaste,
     onOpenRequest,
     onProjectBrowsed,
     onReload,
@@ -50,7 +60,23 @@ export default function RequestForm(props: RequestFormProps) {
   } = props;
   const [browseError, setBrowseError] = useState("");
   const [isBrowsingProject, setIsBrowsingProject] = useState(false);
+  const [isExportPanelOpen, setIsExportPanelOpen] = useState(false);
+  const [isImportPanelOpen, setIsImportPanelOpen] = useState(false);
+  const [isPasteImportOpen, setIsPasteImportOpen] = useState(false);
+  const [pasteImportText, setPasteImportText] = useState("");
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const isRequestLookupDisabled = isRunning || isOpeningRequest || !requestLookupId.trim();
+  const isImportExportDisabled = isRunning || isOpeningRequest;
+
+  const handleImportChange: ChangeEventHandler<HTMLInputElement> = (event) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (file) {
+      onImportFile(file);
+      setIsImportPanelOpen(false);
+      setIsPasteImportOpen(false);
+    }
+  };
 
   const handleBrowseProject = async () => {
     setBrowseError("");
@@ -111,6 +137,16 @@ export default function RequestForm(props: RequestFormProps) {
                 }
               }}
             />
+          </span>
+          <span className="request-file-actions">
+            <input
+              ref={importInputRef}
+              aria-label="Import simulation data file"
+              type="file"
+              accept="application/json,.json"
+              hidden
+              onChange={handleImportChange}
+            />
             <button
               className="lookup-button"
               type="button"
@@ -119,7 +155,121 @@ export default function RequestForm(props: RequestFormProps) {
             >
               {isOpeningRequest ? "Opening..." : "Open"}
             </button>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={isImportExportDisabled}
+              onClick={() => {
+                setIsExportPanelOpen(false);
+                setIsImportPanelOpen((current) => !current);
+              }}
+            >
+              Import
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={isImportExportDisabled || !canExport}
+              onClick={() => {
+                setIsImportPanelOpen(false);
+                setIsPasteImportOpen(false);
+                setIsExportPanelOpen((current) => !current);
+              }}
+            >
+              Export
+            </button>
           </span>
+          {isImportPanelOpen && (
+            <div className="import-panel" role="dialog" aria-label="Import simulation data">
+              <span className="import-actions">
+                <button
+                  aria-label="Import simulation data file"
+                  className="secondary-button"
+                  type="button"
+                  disabled={isImportExportDisabled}
+                  onClick={() => importInputRef.current?.click()}
+                >
+                  File
+                </button>
+                <button
+                  aria-label="Paste simulation data"
+                  className="secondary-button"
+                  type="button"
+                  disabled={isImportExportDisabled}
+                  onClick={() => setIsPasteImportOpen((current) => !current)}
+                >
+                  Paste
+                </button>
+              </span>
+              {isPasteImportOpen && (
+                <div className="paste-import-panel" aria-label="Paste simulation data">
+                  <label>
+                    Simulation Data JSON
+                    <textarea
+                      value={pasteImportText}
+                      rows={7}
+                      spellCheck={false}
+                      onChange={(event) => setPasteImportText(event.target.value)}
+                    />
+                  </label>
+                  <span className="paste-import-actions">
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      disabled={isImportExportDisabled}
+                      onClick={() => {
+                        onImportPaste(pasteImportText);
+                        setIsImportPanelOpen(false);
+                        setIsPasteImportOpen(false);
+                      }}
+                    >
+                      Import
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => {
+                        setIsPasteImportOpen(false);
+                        setPasteImportText("");
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+          {isExportPanelOpen && (
+            <div className="export-panel" role="dialog" aria-label="Export simulation data">
+              <span className="export-actions">
+                <button
+                  aria-label="Copy simulation data to clipboard"
+                  className="secondary-button"
+                  type="button"
+                  disabled={isImportExportDisabled || !canExport}
+                  onClick={() => {
+                    onExportCopy();
+                    setIsExportPanelOpen(false);
+                  }}
+                >
+                  Copy
+                </button>
+                <button
+                  aria-label="Download simulation data file"
+                  className="secondary-button"
+                  type="button"
+                  disabled={isImportExportDisabled || !canExport}
+                  onClick={() => {
+                    onExportFile();
+                    setIsExportPanelOpen(false);
+                  }}
+                >
+                  File
+                </button>
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="two-col">

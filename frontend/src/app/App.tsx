@@ -17,6 +17,7 @@ import {
 import { buildAddressLabels } from "../lib/labels";
 import { loadPersistedUIState, savePersistedUIState } from "../lib/persistence";
 import { traceDataFromResponse } from "../lib/forgeTrace";
+import { buildSimulationExport, parseSimulationExportText, simulationExportFilename } from "../lib/simulationExchange";
 import type { SimulateRequest, SimulateResponse } from "../api/types";
 
 const requestLookupTimeoutMillis = 10_000;
@@ -99,7 +100,7 @@ export default function App() {
     onSuccess: (result, variables) => {
       setResponse(result.response);
       setRequestLookupId(result.requestId);
-      setOutputView(result.response.erc20Transfers?.length ? "flow" : result.response.balanceAnalysis ? "balances" : "trace");
+      setOutputView(outputViewFromResponse(result.response));
       setExpandMode("depth");
       setOptimisticProjects([]);
       syncRequestIdToURL(result.requestId);
@@ -144,7 +145,7 @@ export default function App() {
           setForm(formFromRequest(record.request, apiUrl));
           setResponse(record.response);
           setRequestLookupId(record.id);
-          setOutputView(record.response.erc20Transfers?.length ? "flow" : record.response.balanceAnalysis ? "balances" : "trace");
+          setOutputView(outputViewFromResponse(record.response));
           setExpandMode("depth");
           setError("");
           syncRequestIdToURL(record.id);
@@ -213,6 +214,82 @@ export default function App() {
     openStoredRequestById(requestLookupId);
   };
 
+  const buildSimulationExportData = () => {
+    if (!response) {
+      throw new Error("Run or import a simulation before exporting");
+    }
+
+    const request = buildRequest(form);
+    const exported = buildSimulationExport(request, response);
+    return {
+      filename: simulationExportFilename(exported.id),
+      text: `${JSON.stringify(exported, null, 2)}\n`
+    };
+  };
+
+  const exportSimulationDataToFile = () => {
+    try {
+      const exported = buildSimulationExportData();
+      downloadTextAsFile(exported.text, exported.filename);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const copySimulationData = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("clipboard write is not available");
+      }
+      await navigator.clipboard.writeText(buildSimulationExportData().text);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const downloadTextAsFile = (text: string, filename: string) => {
+    const blob = new Blob([text], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
+  const applySimulationImport = (text: string) => {
+    const parsed = parseSimulationExportText(text);
+    setForm(formFromRequest(parsed.request, form.apiUrl));
+    setResponse(parsed.response);
+    setRequestLookupId(parsed.id);
+    setOutputView(outputViewFromResponse(parsed.response));
+    setExpandMode("depth");
+    if (parsed.request.projectPath) {
+      setOptimisticProjects((current) => mergeProjects([parsed.request.projectPath ?? ""], current).slice(0, 20));
+    }
+    setError("");
+  };
+
+  const importSimulationData = async (file: File) => {
+    try {
+      applySimulationImport(await file.text());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const pasteSimulationData = (text: string) => {
+    try {
+      applySimulationImport(text);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   const changeRequestLookupId = (value: string) => {
     if (isOpeningRequest) {
       requestLookupAbortRef.current?.abort();
@@ -228,6 +305,7 @@ export default function App() {
         chains={chains}
         error={error}
         form={form}
+        canExport={Boolean(response)}
         isRunning={simulation.isPending}
         isOpeningRequest={isOpeningRequest}
         projectSuggestions={projectSuggestions}
@@ -240,6 +318,10 @@ export default function App() {
           setOptimisticProjects((current) => mergeProjects([path], current).slice(0, 20));
           void queryClient.invalidateQueries({ queryKey: ["projects", form.apiUrl] });
         }}
+        onExportCopy={() => void copySimulationData()}
+        onExportFile={exportSimulationDataToFile}
+        onImportFile={(file) => void importSimulationData(file)}
+        onImportPaste={pasteSimulationData}
         onReload={reloadApp}
         onRequestTabChange={setRequestTab}
         onRequestLookupIdChange={changeRequestLookupId}
@@ -280,6 +362,10 @@ function mergeProjects(primary: string[], secondary: string[]): string[] {
     merged.push(path);
   }
   return merged;
+}
+
+function outputViewFromResponse(response: SimulateResponse): OutputView {
+  return response.erc20Transfers?.length ? "flow" : response.balanceAnalysis ? "balances" : "trace";
 }
 
 function syncRequestIdToURL(requestId: string) {
