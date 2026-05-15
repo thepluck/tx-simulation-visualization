@@ -18,7 +18,7 @@ import { buildAddressLabels } from "../lib/labels";
 import { loadPersistedUIState, savePersistedUIState } from "../lib/persistence";
 import { traceDataFromResponse } from "../lib/forgeTrace";
 import { buildSimulationExport, parseSimulationExportText, simulationExportFilename } from "../lib/simulationExchange";
-import type { SimulateRequest, SimulateResponse } from "../api/types";
+import type { SimulateRequest, SimulateResponse, SimulationRecord } from "../api/types";
 
 const requestLookupTimeoutMillis = 10_000;
 
@@ -30,6 +30,7 @@ export default function App() {
   const [requestTab, setRequestTab] = useState<RequestTab>(initialUIState.requestTab);
   const [outputView, setOutputView] = useState<OutputView>(initialUIState.outputView);
   const [response, setResponse] = useState<SimulateResponse | null>(initialUIState.response);
+  const [simulationRecord, setSimulationRecord] = useState<SimulationRecord | null>(initialUIState.simulationRecord);
   const [requestLookupId, setRequestLookupId] = useState(initialUIState.response?.id ?? "");
   const [theme, setTheme] = useState<ThemeMode>(initialUIState.theme);
   const [error, setError] = useState("");
@@ -41,8 +42,8 @@ export default function App() {
   const loadedInitialRequestRef = useRef(false);
 
   useEffect(() => {
-    savePersistedUIState({ form, outputView, requestTab, response, theme, traceExpandDepth });
-  }, [form, outputView, requestTab, response, theme, traceExpandDepth]);
+    savePersistedUIState({ form, outputView, requestTab, response, simulationRecord, theme, traceExpandDepth });
+  }, [form, outputView, requestTab, response, simulationRecord, theme, traceExpandDepth]);
 
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -99,6 +100,7 @@ export default function App() {
       runSimulation(apiUrl, request, signal),
     onSuccess: (result, variables) => {
       setResponse(result.response);
+      setSimulationRecord(buildSimulationExport(variables.request, result.response));
       setRequestLookupId(result.requestId);
       setOutputView(outputViewFromResponse(result.response));
       setExpandMode("depth");
@@ -144,6 +146,7 @@ export default function App() {
         .then((record) => {
           setForm(formFromRequest(record.request, apiUrl));
           setResponse(record.response);
+          setSimulationRecord(record);
           setRequestLookupId(record.id);
           setOutputView(outputViewFromResponse(record.response));
           setExpandMode("depth");
@@ -215,15 +218,13 @@ export default function App() {
   };
 
   const buildSimulationExportData = () => {
-    if (!response) {
+    if (!simulationRecord) {
       throw new Error("Run or import a simulation before exporting");
     }
 
-    const request = buildRequest(form);
-    const exported = buildSimulationExport(request, response);
     return {
-      filename: simulationExportFilename(exported.id),
-      text: `${JSON.stringify(exported, null, 2)}\n`
+      filename: simulationExportFilename(simulationRecord.id),
+      text: `${JSON.stringify(simulationRecord, null, 2)}\n`
     };
   };
 
@@ -265,6 +266,7 @@ export default function App() {
     const parsed = parseSimulationExportText(text);
     setForm(formFromRequest(parsed.request, form.apiUrl));
     setResponse(parsed.response);
+    setSimulationRecord(parsed);
     setRequestLookupId(parsed.id);
     setOutputView(outputViewFromResponse(parsed.response));
     setExpandMode("depth");
@@ -305,7 +307,7 @@ export default function App() {
         chains={chains}
         error={error}
         form={form}
-        canExport={Boolean(response)}
+        canExport={Boolean(simulationRecord)}
         isRunning={simulation.isPending}
         isOpeningRequest={isOpeningRequest}
         projectSuggestions={projectSuggestions}

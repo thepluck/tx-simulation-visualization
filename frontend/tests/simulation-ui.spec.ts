@@ -105,6 +105,8 @@ test("exports and imports simulation input and output", async ({ page }, testInf
   await page.getByLabel("Calldata").fill("0x23b872dd");
   await page.getByRole("button", { name: "Run Simulation" }).click();
   await expect(page.getByText("success | 12ms | exit 0 | browser-test")).toBeVisible();
+  await page.getByLabel("Block").fill("not-a-block");
+  await page.getByLabel("Sender").fill(owner);
 
   await page.getByRole("button", { name: "Export" }).click();
   const exportDialog = page.getByRole("dialog", { name: "Export simulation data" });

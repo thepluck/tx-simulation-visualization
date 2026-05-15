@@ -1,6 +1,6 @@
 import { defaults, type FormState, type OutputView, type RequestTab, type ThemeMode } from "../app/form";
-import { simulateResponseSchema } from "../api/schemas";
-import type { SimulateResponse } from "../api/types";
+import { simulateResponseSchema, simulationRecordSchema } from "../api/schemas";
+import type { SimulateResponse, SimulationRecord } from "../api/types";
 
 const storageKey = "txsim.ui.v1";
 const legacyDefaultApiUrl = "http://127.0.0.1:8080";
@@ -10,6 +10,7 @@ export type PersistedUIState = {
   outputView: OutputView;
   requestTab: RequestTab;
   response: SimulateResponse | null;
+  simulationRecord: SimulationRecord | null;
   theme: ThemeMode;
   traceExpandDepth: number;
   defaultApiUrl?: string;
@@ -27,13 +28,15 @@ export function loadPersistedUIState(): PersistedUIState {
 
   try {
     const parsed = JSON.parse(raw) as Partial<PersistedUIState>;
-    const response = sanitizeResponse(parsed.response);
+    const simulationRecord = sanitizeSimulationRecord(parsed.simulationRecord);
+    const response = simulationRecord?.response ?? sanitizeResponse(parsed.response);
     const outputView = validOutputView(parsed.outputView) && response ? parsed.outputView : "trace";
     return {
       form: sanitizeForm(parsed.form, parsed.defaultApiUrl),
       outputView,
       requestTab: validRequestTab(parsed.requestTab) ? parsed.requestTab : "overrides",
       response,
+      simulationRecord,
       theme: validThemeMode(parsed.theme) ? parsed.theme : "light",
       traceExpandDepth: clampDepth(parsed.traceExpandDepth)
     };
@@ -50,7 +53,10 @@ export function savePersistedUIState(state: PersistedUIState) {
     window.localStorage.setItem(storageKey, JSON.stringify({ ...state, defaultApiUrl: defaults.apiUrl }));
   } catch {
     try {
-      window.localStorage.setItem(storageKey, JSON.stringify({ ...state, defaultApiUrl: defaults.apiUrl, response: null }));
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify({ ...state, defaultApiUrl: defaults.apiUrl, response: null, simulationRecord: null })
+      );
     } catch {
       // Persisting is only a debugging convenience; never block the UI on quota issues.
     }
@@ -96,6 +102,7 @@ function defaultUIState(): PersistedUIState {
     outputView: "trace",
     requestTab: "overrides",
     response: null,
+    simulationRecord: null,
     theme: "light",
     traceExpandDepth: 3
   };
@@ -115,6 +122,11 @@ function validThemeMode(value: unknown): value is ThemeMode {
 
 function sanitizeResponse(value: unknown): SimulateResponse | null {
   const parsed = simulateResponseSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+function sanitizeSimulationRecord(value: unknown): SimulationRecord | null {
+  const parsed = simulationRecordSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
 }
 
