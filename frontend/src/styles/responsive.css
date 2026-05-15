@@ -35,6 +35,21 @@
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
+  .request-file-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .request-file-actions .lookup-button,
+  .request-file-actions .secondary-button {
+    min-width: 0;
+    padding: 0 8px;
+  }
+
+  .paste-import-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .project-path-input {
     grid-column: 1 / -1;
   }

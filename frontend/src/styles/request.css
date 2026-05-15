@@ -146,7 +146,43 @@ button:focus-visible {
 
 .request-id-field {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.request-file-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.export-panel,
+.import-panel,
+.paste-import-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-alt);
+  padding: 10px;
+}
+
+.export-actions,
+.import-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.paste-import-panel textarea {
+  min-height: 132px;
+  background: var(--surface);
+}
+
+.paste-import-actions {
+  display: flex;
+  justify-content: flex-end;
   gap: 8px;
 }
 
@@ -157,7 +193,8 @@ button:focus-visible {
 
 .browse-button,
 .history-button,
-.lookup-button {
+.lookup-button,
+.secondary-button {
   min-width: 82px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -166,6 +203,10 @@ button:focus-visible {
   padding: 0 12px;
   font-size: 13px;
   font-weight: 800;
+}
+
+.secondary-button {
+  min-height: 34px;
 }
 
 .history-button {
@@ -177,7 +218,8 @@ button:focus-visible {
   opacity: 0.7;
 }
 
-.lookup-button:disabled {
+.lookup-button:disabled,
+.secondary-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }

@@ -1,3 +1,4 @@
+import { readFile, writeFile } from "node:fs/promises";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
   apiURL,
@@ -74,6 +75,140 @@ test("changes the running action to abort and cancels the active request", async
   await page.getByRole("button", { name: "Abort" }).click();
   await expect(page.getByText("Simulation aborted")).toBeVisible();
   await expect(page.getByRole("button", { name: "Run Simulation" })).toBeVisible();
+});
+
+test("exports and imports simulation input and output", async ({ page }, testInfo) => {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://127.0.0.1:5173" });
+  await routeBaseEndpoints(page);
+  await page.route(`${apiURL}/simulate`, async (route) => {
+    const request = route.request().postDataJSON() as { blockNumber?: string; sender?: string; target?: string; data?: string };
+    expect(request.blockNumber).toBe("23000000");
+    expect(request.sender).toBe(spender);
+    expect(request.target).toBe(token);
+    expect(request.data).toBe("0x23b872dd");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(simulateResponse())
+    });
+  });
+
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Export" })).toBeDisabled();
+  const actionButtonTops = await page.locator(".request-file-actions button").evaluateAll((buttons) =>
+    buttons.map((button) => Math.round(button.getBoundingClientRect().top))
+  );
+  expect(Math.max(...actionButtonTops) - Math.min(...actionButtonTops)).toBeLessThanOrEqual(1);
+  await page.getByLabel("Block").fill("23000000");
+  await page.getByLabel("Sender").fill(spender);
+  await page.getByLabel("Target").fill(token);
+  await page.getByLabel("Calldata").fill("0x23b872dd");
+  await page.getByRole("button", { name: "Run Simulation" }).click();
+  await expect(page.getByText("success | 12ms | exit 0 | browser-test")).toBeVisible();
+  await page.getByLabel("Block").fill("not-a-block");
+  await page.getByLabel("Sender").fill(owner);
+
+  await page.getByRole("button", { name: "Export" }).click();
+  const exportDialog = page.getByRole("dialog", { name: "Export simulation data" });
+  await expect(exportDialog.getByRole("button", { name: "Copy simulation data to clipboard" })).toBeVisible();
+  await expect(exportDialog.getByRole("button", { name: "Download simulation data file" })).toBeVisible();
+  await exportDialog.getByRole("button", { name: "Copy simulation data to clipboard" }).click();
+  const copiedExport = JSON.parse(await page.evaluate(() => navigator.clipboard.readText()));
+  expect(copiedExport.id).toBe("browser-test");
+  expect(copiedExport.request).toMatchObject({
+    blockNumber: "23000000",
+    sender: spender,
+    target: token,
+    data: "0x23b872dd"
+  });
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export" }).click();
+  await page.getByRole("dialog", { name: "Export simulation data" }).getByRole("button", { name: "Download simulation data file" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("foundry-tx-simulator-browser-test.json");
+  const downloadPath = await download.path();
+  expect(downloadPath).not.toBeNull();
+  const exported = JSON.parse(await readFile(downloadPath!, "utf8"));
+  expect(exported.id).toBe("browser-test");
+  expect(exported.request).toMatchObject({
+    blockNumber: "23000000",
+    sender: spender,
+    target: token,
+    data: "0x23b872dd"
+  });
+  expect(exported.response.id).toBe("browser-test");
+
+  const importPath = testInfo.outputPath("simulation-import.json");
+  await writeFile(
+    importPath,
+    JSON.stringify(
+      {
+        ...exported,
+        id: "imported-run",
+        request: {
+          ...exported.request,
+          blockNumber: "23000001",
+          sender: owner,
+          data: "0x"
+        },
+        response: {
+          ...exported.response,
+          id: "imported-run"
+        }
+      },
+      null,
+      2
+    )
+  );
+
+  await page.getByLabel("Block").fill("1");
+  const fileChooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Import", exact: true }).click();
+  await page.getByRole("dialog", { name: "Import simulation data" }).getByRole("button", { name: "Import simulation data file" }).click();
+  const fileChooser = await fileChooserPromise;
+  await fileChooser.setFiles(importPath);
+  await expect(page.getByLabel("Request ID")).toHaveValue("imported-run");
+  await expect(page.getByLabel("Block")).toHaveValue("23000001");
+  await expect(page.getByLabel("Sender")).toHaveValue(owner);
+  await expect(page.getByLabel("Calldata")).toHaveValue("0x");
+  await expect(page.getByText("success | 12ms | exit 0 | imported-run")).toBeVisible();
+  await expect(page.getByRole("img", { name: "Fund flow graph" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Import", exact: true }).click();
+  const importDialog = page.getByRole("dialog", { name: "Import simulation data" });
+  await expect(importDialog.getByRole("button", { name: "Import simulation data file" })).toBeVisible();
+  await expect(importDialog.getByRole("button", { name: "Paste simulation data" })).toBeVisible();
+  await importDialog.getByRole("button", { name: "Paste simulation data" }).click();
+  await page.getByLabel("Simulation Data JSON").fill(
+    JSON.stringify({
+      ...exported,
+      id: "pasted-run",
+      request: {
+        ...exported.request,
+        blockNumber: "23000002",
+        sender: recipient
+      },
+      response: {
+        ...exported.response,
+        id: "pasted-run"
+      }
+    })
+  );
+  await importDialog.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(page.getByLabel("Request ID")).toHaveValue("pasted-run");
+  await expect(page.getByLabel("Block")).toHaveValue("23000002");
+  await expect(page.getByLabel("Sender")).toHaveValue(recipient);
+  await expect(page.getByText("success | 12ms | exit 0 | pasted-run")).toBeVisible();
+
+  const invalidImportPath = testInfo.outputPath("invalid-import.json");
+  await writeFile(invalidImportPath, JSON.stringify({ id: "bad", request: {}, response: {} }));
+  const invalidFileChooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Import", exact: true }).click();
+  await page.getByRole("dialog", { name: "Import simulation data" }).getByRole("button", { name: "Import simulation data file" }).click();
+  const invalidFileChooser = await invalidFileChooserPromise;
+  await invalidFileChooser.setFiles(invalidImportPath);
+  await expect(page.locator(".error-box")).toContainText("import validation failed:");
 });
 
 test("uses configured explorer links and renders only the last main call subtree", async ({ page }) => {
